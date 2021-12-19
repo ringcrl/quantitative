@@ -10,7 +10,7 @@ sender = '' # 发件人邮箱账号
 sender_pass = '' # 发件人邮箱密码
 receiver = '' # 收件人邮箱账号
 
-def mail(message):
+def send_mail(message):
     ret = True
     try:
         current_dt = time.strftime("%Y-%m-%d", time.localtime())
@@ -30,7 +30,7 @@ def mail(message):
     return ret
 
 if __name__ == "__main__":
-    ret = mail("Test")
+    ret = send_mail("Test")
     if ret:
         print("邮件发送成功")
     else:
