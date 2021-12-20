@@ -29,6 +29,15 @@ general_stocks = [
     'US.SPY', # 标普
 ]
 
+# 自选股
+custom_stocks = [
+    'US.VZ',
+    'US.TSLA',
+    'US.NVDA',
+    'US.AAPL',
+    'US.BABA',
+]
+
 # 动量轮动参数
 stock_num = 1 # 买入评分最高的前 stock_num 只股票
 momentum_day = 29 # 最新动量参考最近 momentum_day 的
@@ -161,12 +170,28 @@ def get_timing_signal(stock_data, mean_day, mean_diff_day, N):
     slope_series.append(slope)
     rsrs_score = get_zscore(slope_series[-M:]) * r2
     # 综合判断所有信号
-    if rsrs_score > score_threshold and today_MA > before_MA:
-        return "BUY"
-    elif rsrs_score < -score_threshold and today_MA < before_MA:
-        return "SELL"
+    # if rsrs_score > score_threshold and today_MA > before_MA:
+    #     return "BUY"
+    # elif rsrs_score < -score_threshold and today_MA < before_MA:
+    #     return "SELL"
+    # else:
+    #     return "KEEP"
+
+    if rsrs_score > score_threshold:
+        if today_MA > before_MA:
+            return 'BUY'
+        else:
+            return 'SELL'
+    elif rsrs_score < -score_threshold:
+        if today_MA > before_MA:
+            return 'BUY'
+        else:
+            return 'SELL'
     else:
-        return "KEEP"
+        if today_MA > before_MA:
+            return 'KEEP'
+        else:
+            return 'SELL'
 
 # 择时模块-设定初始斜率序列，通过前 M 日最高最低价的线性回归计算初始的斜率，返回斜率的列表
 def initial_slope_series(general_stock, N, M):
@@ -194,15 +219,9 @@ def run_today():
 '''
     print(message)
 
+
+
 def batch_recall():
-        # 自选股
-    custom_stocks = [
-        'US.NVDA',
-        'US.TSLA',
-        'US.VZ',
-        'US.BABA',
-        'US.AAPL',
-    ]
     for stock in custom_stocks:
         run_recall(stock)
 
@@ -212,22 +231,25 @@ def run_recall(stock_code):
     recall_days = 250
     monkey_count = 100000
     stock_count = 0
-    general_stock_data_all = get_code_data(general_stocks[0])
-    stock_data_all = get_code_data(stock_code)
+    general_stock_data_all = get_code_data(stock_code)
+    # stock_data_all = get_code_data(stock_code)
 
     for i in range(recall_days):
         before_day = recall_days - i
         general_stock_data = general_stock_data_all[-before_day-N-M:-before_day]
-        stock_data = stock_data_all[-before_day-momentum_day:-before_day]
+        # stock_data = stock_data_all[-before_day-momentum_day:-before_day]
         
-        slope_series = initial_slope_series(general_stock_data, N, M)[:-1]
-        timing_signal = get_timing_signal(general_stock_data, mean_day, mean_diff_day, N)
+        # slope_series = initial_slope_series(general_stock_data, N, M)[:-1]
+        # timing_signal = get_timing_signal(general_stock_data, mean_day, mean_diff_day, N)
 
-        score = get_stock_score(stock_data)
-        close_price = stock_data.close[-1:].mean()
-        is_buy = timing_signal != 'SELL' and score > score_threshold
+        timing_signal = get_stock_signal(general_stock_data, mean_day, mean_diff_day, N)
+
+        # score = get_stock_score(stock_data)
+        # close_price = stock_data.close[-1:].mean()
+        close_price = general_stock_data.close[-1:].mean()
+        is_buy = timing_signal == 'BUY'
         is_sell = timing_signal == 'SELL'
-        info = f'''{stock_code} {i}/{recall_days} {timing_signal} {format(score, '.4f')} {close_price}'''
+        info = f'''{stock_code} {i}/{recall_days} {timing_signal} {close_price}'''
         if is_buy:
             if monkey_count != 0:
                 stock_count = monkey_count / close_price
@@ -247,10 +269,24 @@ def run_recall(stock_code):
         else:
             # print(info)
             pass
-    final_close = stock_data_all.close[-1:].mean()
+    final_close = general_stock_data_all.close[-1:].mean()
     total = monkey_count + stock_count * final_close
     print(f'''{stock_code} 总价：{format(total, '.2f')} 最新单价：{final_close}''')
 
+def get_stock_signal(stock_data):
+    global slope_series
+    slope_series = initial_slope_series(stock_data, N, M)[:-1]
+    return get_timing_signal(stock_data, mean_day, mean_diff_day, N)
+
+def batch_get_stock_signal():
+    msg = []
+    for stock_code in custom_stocks:
+        general_stock_data = get_code_data(stock_code)
+        stock_signal = get_stock_signal(general_stock_data)
+        msg.append(f'{stock_code} {stock_signal}')
+    print('\r\n'.join(msg))
+
 if __name__ == "__main__":
     # run_today()
-    batch_recall()
+    # batch_recall()
+    batch_get_stock_signal()
