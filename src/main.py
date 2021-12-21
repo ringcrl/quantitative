@@ -22,45 +22,35 @@ import time
 import numpy as np
 import math
 
-# 大盘股
-general_stocks = [
+# 自选股
+custom_stocks = [
     'US.QQQ', # 纳指
     'US.DIA', # 道指
     'US.SPY', # 标普
-]
-
-# 自选股
-custom_stocks = [
     'US.VZ',
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
     'US.BABA',
+    'US.BILI',
+    'US.GOOGL',
+    'US.IWM',
 ]
 
 # 动量轮动参数
-stock_num = 1 # 买入评分最高的前 stock_num 只股票
 momentum_day = 29 # 最新动量参考最近 momentum_day 的
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天
 M = 600 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天
-score_threshold = 0.7 # rsrs 标准分指标阈值
-# MA 择时参数
-mean_day = 20 # 计算结束 MA 收盘价，参考最近 mean_day
-mean_diff_day = 3 # 计算初始 MA 收盘价，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
-run_today_day = 1
-day = 1
+score_threshold = 0.5 # rsrs 标准分指标阈值
+# 择时参数
+mean_day = 30 # 计算结束值，参考最近 mean_day
+mean_diff_day = 3 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
 slope_series = None
+msgs = [] # 要打印的消息
 # 日期计算
 # current_dt = time.strftime("%Y-%m-%d", time.localtime())
 # current_dt = datetime.strptime(current_dt, '%Y-%m-%d')
-# previous_date  = current_dt - timedelta(days = day)
-
-def get_stock_pool():
-    market_list = get_market_cap()
-    res = []
-    for market_item in market_list:
-        res.append(market_item['stock_code'])
-    return res
+# previous_date  = current_dt - timedelta(days = 1)
 
 # 根据市值，获取股票池
 def get_market_cap(market_val=50000000000):
@@ -82,7 +72,7 @@ def get_market_cap(market_val=50000000000):
             print('all count = ', all_count)
             
             for item in ret_list:
-                stock_list.append({'stock_code': item.stock_code, 'stock_name': item.stock_name})
+                stock_list.append(item.stock_code)
         else:
             print('error: ', data)
         time.sleep(1)
@@ -107,19 +97,7 @@ def get_code_data(code, freq='K_DAY', count=1000):
         print(err_message)
         return None
 
-# 选股模块-动量因子轮动，基于股票年化收益和判定系数打分，并按照分数从大到小排名
-def get_rank(stock_pool):
-    origin_dict = {}
-    for stock in stock_pool:
-        data = get_code_data(stock, 'K_DAY', momentum_day)
-        # 拉不到数据
-        if data is None:
-            continue
-        score = get_stock_score(data)
-        origin_dict[stock] = score
-    sort_list = sorted(origin_dict.items(), key = lambda item:item[1], reverse = True)
-    return sort_list
-
+# 获取股票得分
 def get_stock_score(stock_data):
         # 收盘价
     y = stock_data['log'] = np.log(stock_data.close)
@@ -151,112 +129,67 @@ def get_zscore(slope_series):
     std = np.std(slope_series)
     return (slope_series[-1] - mean) / std
 
-# 择时模块-计算综合信号
-# 1.获得 rsrs 与 MA 信号,rsrs 信号算法参考优化说明，MA 信号为一段时间两个端点的 MA 数值比较大小
-# 2.信号同时为 True 时返回买入信号，同为 False 时返回卖出信号，其余情况返回持仓不变信号
-# 解释：
-#       MA 信号：MA 指标是英文(Moving average)的简写，叫移动平均线指标。
-#       RSRS 择时信号：https://www.joinquant.com/view/community/detail/32b60d05f16c7d719d7fb836687504d6?type=1
-#       RSRS 解释：https://zhuanlan.zhihu.com/p/33501881
+# 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, mean_day, mean_diff_day, N):
-    # 计算 MA 信号
-    # 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1，23 天，要后 20 天
-    today_MA = stock_data.turnover[-mean_day:].mean()
-    # 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0，23 天，要前 20 天
-    before_MA = stock_data.turnover[-mean_day-mean_diff_day:-mean_diff_day].mean()
+    # 当前值
+    curr_val = stock_data.turnover[-mean_day:].mean()
+    # 之前值
+    before_val = stock_data.turnover[-mean_day-mean_diff_day:-mean_diff_day].mean()
     # 计算 rsrs 信号
     high_low_data = stock_data[-N:]
     intercept, slope, r2 = get_ols(high_low_data.low, high_low_data.high)
     slope_series.append(slope)
     rsrs_score = get_zscore(slope_series[-M:]) * r2
-    # 综合判断所有信号
-    # if rsrs_score > score_threshold and today_MA > before_MA:
-    #     return "BUY"
-    # elif rsrs_score < -score_threshold and today_MA < before_MA:
-    #     return "SELL"
-    # else:
-    #     return "KEEP"
 
     if rsrs_score > score_threshold:
-        if today_MA > before_MA:
-            return 'BUY'
+        if curr_val > before_val:
+            return 'BUY', rsrs_score, 'VAL_UP'
         else:
-            return 'SELL'
+            return 'SELL', rsrs_score, 'VAL_DOWN'
     elif rsrs_score < -score_threshold:
-        if today_MA > before_MA:
-            return 'BUY'
+        if curr_val > before_val:
+            return 'BUY', rsrs_score, 'VAL_UP'
         else:
-            return 'SELL'
+            return 'SELL', rsrs_score, 'VAL_DOWN'
     else:
-        if today_MA > before_MA:
-            return 'KEEP'
+        if curr_val > before_val:
+            return 'KEEP', rsrs_score, 'VAL_UP'
         else:
-            return 'SELL'
+            return 'SELL', rsrs_score, 'VAL_DOWN'
 
 # 择时模块-设定初始斜率序列，通过前 M 日最高最低价的线性回归计算初始的斜率，返回斜率的列表
 def initial_slope_series(general_stock, N, M):
     return [get_ols(general_stock.low[i:i+N], general_stock.high[i:i+N])[1] for i in range(M)]
 
-def run_today():
-    global slope_series
-    code_data = get_code_data(general_stocks[0], 'K_DAY', N + M)
-    slope_series =  initial_slope_series(code_data, N, M)[:-1] # 除去回测第一天的 slope ，避免运行时重复加入
-
-    message = ''
-    message += f'''===大盘信号===
-'''
-    for general_stock in general_stocks:
-        code_data = get_code_data(general_stock)
-        timing_signal = get_timing_signal(code_data, mean_day, mean_diff_day, N)
-        message += f'''{general_stock} | {timing_signal}
-'''
-    message += f'''===个股信号===
-'''
-    stock_pool = get_stock_pool()
-    rank_list = get_rank(stock_pool)
-    for stock in rank_list:
-        message += f'''{stock[0]} | {format(stock[1], '.4f')}
-'''
-    print(message)
-
-
-
+# 批量运行回测
 def batch_recall():
     for stock in custom_stocks:
         run_recall(stock)
 
+# 运行回测
 def run_recall(stock_code):
     global slope_series
 
     recall_days = 250
     monkey_count = 100000
     stock_count = 0
-    general_stock_data_all = get_code_data(stock_code)
-    # stock_data_all = get_code_data(stock_code)
+    stock_data_all = get_code_data(stock_code)
 
     for i in range(recall_days):
         before_day = recall_days - i
-        general_stock_data = general_stock_data_all[-before_day-N-M:-before_day]
-        # stock_data = stock_data_all[-before_day-momentum_day:-before_day]
-        
-        # slope_series = initial_slope_series(general_stock_data, N, M)[:-1]
-        # timing_signal = get_timing_signal(general_stock_data, mean_day, mean_diff_day, N)
-
-        timing_signal = get_stock_signal(general_stock_data, mean_day, mean_diff_day, N)
-
-        # score = get_stock_score(stock_data)
-        # close_price = stock_data.close[-1:].mean()
-        close_price = general_stock_data.close[-1:].mean()
+        stock_data = stock_data_all[-before_day-N-M:-before_day]
+        timing_signal, rsrs_score, val_status = get_stock_signal(stock_data)
+        close_price = stock_data.close[-1:].mean()
         is_buy = timing_signal == 'BUY'
         is_sell = timing_signal == 'SELL'
-        info = f'''{stock_code} {i}/{recall_days} {timing_signal} {close_price}'''
+        info = f'''{stock_code} {i}/{recall_days} {timing_signal} {format(rsrs_score, '.2f')} {format(close_price, '.2f')}'''
         if is_buy:
             if monkey_count != 0:
                 stock_count = monkey_count / close_price
                 monkey_count = 0
                 print(info + ' 买入')
             else:
-                # print(info)
+                print(info)
                 pass
         elif is_sell:
             if stock_count != 0:
@@ -264,29 +197,34 @@ def run_recall(stock_code):
                 stock_count = 0
                 print(info + ' 卖出')
             else:
-                # print(info)
+                print(info)
                 pass
         else:
-            # print(info)
+            print(info)
             pass
-    final_close = general_stock_data_all.close[-1:].mean()
+    final_close = stock_data_all.close[-1:].mean()
     total = monkey_count + stock_count * final_close
-    print(f'''{stock_code} 总价：{format(total, '.2f')} 最新单价：{final_close}''')
+    res = f'''{stock_code} 总价：{format(total, '.2f')} 最新单价：{final_close}'''
+    msgs.append(res)
+    print(res)
 
+# 获取股票信号
 def get_stock_signal(stock_data):
     global slope_series
     slope_series = initial_slope_series(stock_data, N, M)[:-1]
     return get_timing_signal(stock_data, mean_day, mean_diff_day, N)
 
+# 批量获取自选股信号
 def batch_get_stock_signal():
-    msg = []
     for stock_code in custom_stocks:
-        general_stock_data = get_code_data(stock_code)
-        stock_signal = get_stock_signal(general_stock_data)
-        msg.append(f'{stock_code} {stock_signal}')
-    print('\r\n'.join(msg))
+        stock_data = get_code_data(stock_code)
+        before_stock_signal, before_rsrs_score, before_val_status = get_stock_signal(stock_data[:-1])
+        curr_stock_signal, curr_rsrs_score, curr_val_status = get_stock_signal(stock_data)
+        # stock_score = get_stock_score(stock_data[-momentum_day:])
+        msgs.append(f'''{stock_code} {before_stock_signal}->{curr_stock_signal} {curr_val_status} {format(curr_rsrs_score, '.4f')}''')
 
 if __name__ == "__main__":
-    # run_today()
     # batch_recall()
     batch_get_stock_signal()
+
+    print('\r\n'.join(msgs))
