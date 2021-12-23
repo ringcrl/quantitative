@@ -25,11 +25,9 @@ from multiprocessing import Pool
 
 # 日期计算
 current_dt = time.strftime("%Y-%m-%d", time.localtime())
-current_dt = datetime.strptime(current_dt, '%Y-%m-%d')
-previous_date = current_dt - timedelta(days = 1)
-print(current_dt)
-
-msgs = ['\r\n'] # 要打印的消息
+current_date = datetime.strptime(current_dt, '%Y-%m-%d')
+previous_date = current_date - timedelta(days = 1)
+curr_hour = time.localtime()[3]
 
 freq = 'K_DAY' # K_DAY | K_60M
 
@@ -38,29 +36,28 @@ custom_stocks = [
     'US.QQQ', # 纳指
     'US.DIA', # 道指
     'US.SPY', # 标普
-    'US.VZ',
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
+    'US.GOOGL',
+    'US.VZ',
     'US.BABA',
     'US.BILI',
-    'US.GOOGL',
-    'US.IWM',
-    'US.AMC',
-    'HK.00700',
     'US.SE',
-    'US.GME',
     'US.PDD',
-    'US.JD',
+    'US.AMC',
+    'US.GME',
+    'HK.00700',
 ]
 
 # 动量轮动参数
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天，18
-M = 600 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
+M = 100 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
 score_threshold = 0.7 # rsrs 标准分指标阈值
 mean_day = 30 # 计算结束值，参考最近 mean_day
 mean_diff_day = 3 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
-volume_padding = 0.03 # 成交量差距百分比
+volume_padding = 0.02 # 成交量差距百分比
+recall_days = 150 # 回测天数
 
 # 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, mean_day, mean_diff_day, N, slope_series):
@@ -80,21 +77,21 @@ def get_timing_signal(stock_data, mean_day, mean_diff_day, N, slope_series):
         if diff_volume >= 1 + volume_padding:
             return 'BUY', rsrs_score, 'VAL_UP'
         elif diff_volume <= 1 - volume_padding:
-            return 'SELL', rsrs_score, 'VAL_DOWN'
+            return 'KEEP', rsrs_score, 'VAL_DOWN'
         else:
             return 'SELL', rsrs_score, 'VAL_STILL'
     elif rsrs_score <= -score_threshold:
         if diff_volume >= 1 + volume_padding:
             return 'BUY', rsrs_score, 'VAL_UP'
         elif diff_volume <= 1 - volume_padding:
-            return 'SELL', rsrs_score, 'VAL_DOWN'
+            return 'KEEP', rsrs_score, 'VAL_DOWN'
         else:
             return 'SELL', rsrs_score, 'VAL_STILL'
     else:
         if diff_volume >= 1 + volume_padding:
             return 'KEEP', rsrs_score, 'VAL_UP'
         elif diff_volume <= 1 - volume_padding:
-            return 'SELL', rsrs_score, 'VAL_DOWN'
+            return 'KEEP', rsrs_score, 'VAL_DOWN'
         else:
             return 'SELL', rsrs_score, 'VAL_STILL'
 
@@ -186,7 +183,6 @@ def get_stock_signal(stock_data):
 
 # 运行回测
 def recall(stock_code):
-    recall_days = 250
     monkey_count = 100000
     stock_count = 0
     stock_data_all = get_code_data(stock_code)
@@ -230,7 +226,12 @@ def batch_recall():
     res = p.map(recall, custom_stocks)    
     p.close()
     p.join()
-    print('\r\n'.join(res))
+    info = '\r\n'.join(res)
+    msg = f'''
+{current_dt} 回测结果
+{info}
+'''
+    print(msg)
 
 # 批量获取自选股信号
 def batch_op_signal():
@@ -238,27 +239,36 @@ def batch_op_signal():
     res = p.map(op_signal, custom_stocks)
     p.close()
     p.join()
-    print('\r\n'.join(res))
+    info = '\r\n'.join(res)
+    msg = f'''
+{current_dt} 操作信号
+{info}
+'''
+    print(msg)
 
 
 def op_signal(stock_code):
     stock_data = get_code_data(stock_code)
-    # stock_data = stock_data[:-1] # 开盘中去掉今天的数据，防止成交量干扰
+
+    # 开盘中去掉今天的数据，防止成交量干扰
+    if curr_hour >= 22 or curr_hour < 5:
+        stock_data = stock_data[:-1]
+
     before_stock_signal, before_rsrs_score, before_val_status = get_stock_signal(stock_data[:-1])
     curr_stock_signal, curr_rsrs_score, curr_val_status = get_stock_signal(stock_data)
     prefix = ''
     if before_stock_signal != curr_stock_signal:
-        prefix = '** '
-    elif curr_stock_signal == 'BUY':
-        prefix = '* '
-    elif curr_stock_signal == 'SELL':
-        prefix = '* '
+        if curr_stock_signal == 'BUY':
+            prefix = '买 '
+        elif curr_stock_signal == 'SELL':
+            prefix = '卖 '
+        else:
+            prefix = '观察 '
     res = f'''{prefix}{stock_code} 【{before_stock_signal}->{curr_stock_signal}】 【{format(curr_rsrs_score, '.2f')} {curr_val_status}】'''
     return res
-
 
 if __name__ == "__main__":
     # batch_recall()
     batch_op_signal()
 
-    # recall('US.AAPL')
+    # recall('US.AMC')
