@@ -11,6 +11,9 @@
 - 量大成头，量小成底
 - 顶部无量下跌后市还会创新高
 - 顶部放量下跌后市很难创新高
+- 小跌后的大跌买入
+- 看板块一开盘上涨，后面被大盘带下去的
+- 寻找稳量上涨的，放量时候出局
 '''
 
 #-*- coding:utf-8 -*-
@@ -36,13 +39,14 @@ custom_stocks = [
     'US.DIA', # 道指
     'US.SPY', # 标普
 
+    'HK.00700',
+    'US.AMC',
+
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
     'US.GOOGL',
-    'US.AMC',
     'US.BABA',
-    'HK.00700',
 ]
 win_num = 0 # 统计获胜比例
 
@@ -50,7 +54,7 @@ win_num = 0 # 统计获胜比例
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天，18
 M = 200 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
 score_threshold = 0.4 # rsrs 标准分指标阈值
-mean_day = 22 # 计算结束值，参考最近 mean_day
+mean_day = 50 # 计算结束值，参考最近 mean_day
 mean_diff_day = 5 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
 recall_days = 250 # 回测天数
 
@@ -329,6 +333,6 @@ def op_signal(stock_code):
     return res
 
 if __name__ == "__main__":
-    batch_recall()
-    # batch_op_signal()
+    # batch_recall()
+    batch_op_signal()
 
