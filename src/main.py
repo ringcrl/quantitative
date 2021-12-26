@@ -1,18 +1,16 @@
 '''
-优化说明:
-1.使用修正标准分
-    rsrs_score的算法有：
-        仅斜率slope，效果一般；
-        仅标准分zscore，效果不错；
-        修正标准分 = zscore * r2，效果最佳;
-        右偏标准分 = 修正标准分 * slope，效果不错。
-2.将原策略的每次持有两只etf改成只买最优的一个，收益显著提高
-3.将每周调仓换成每日调仓，收益显著提高
-4.因为交易etf，所以手续费设为万分之三，印花税设为零，未设置滑点
-5.修改股票池中候选etf，删除银行，红利等收益较弱品种，增加纳指etf以增加不同国家市场间轮动的可能性
-6.根据研报，默认参数介已设定为最优
-7.加入防未来函数
-8.增加择时与选股模块的打印日志，方便观察每笔操作依据
+- rsrs_score 修正标准分 = zscore * r2，效果最佳
+
+- 缩量上涨还会上涨
+- 缩量下跌还会下跌
+- 高位放巨量上涨必会下跌
+- 低位放巨量上涨必会回调
+- 低位放巨量下跌必会反弹
+- 放量滞涨顶部信号
+- 缩量不跌底部信号
+- 量大成头，量小成底
+- 顶部无量下跌后市还会创新高
+- 顶部放量下跌后市很难创新高
 '''
 
 #-*- coding:utf-8 -*-
@@ -22,6 +20,7 @@ import time
 import numpy as np
 import math
 from multiprocessing import Pool
+import re 
 
 # 日期计算
 current_dt = time.strftime("%Y-%m-%d", time.localtime())
@@ -36,50 +35,56 @@ custom_stocks = [
     'US.QQQ', # 纳指
     'US.DIA', # 道指
     'US.SPY', # 标普
+
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
     'US.GOOGL',
-    'US.VZ',
-    'US.BABA',
-    'US.BILI',
-    'US.SE',
-    'US.PDD',
     'US.AMC',
-    'US.GME',
+    'US.BABA',
     'HK.00700',
 ]
+win_num = 0 # 统计获胜比例
 
 # 动量轮动参数
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天，18
-M = 100 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
-score_threshold = 0.7 # rsrs 标准分指标阈值
-mean_day = 30 # 计算结束值，参考最近 mean_day
-mean_diff_day = 3 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
-volume_padding = 0.02 # 成交量差距百分比
-recall_days = 150 # 回测天数
+M = 200 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
+score_threshold = 0.4 # rsrs 标准分指标阈值
+mean_day = 22 # 计算结束值，参考最近 mean_day
+mean_diff_day = 5 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
+recall_days = 250 # 回测天数
 
 # 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, slope_series):
     # 返回格式：stock_signal, rsrs_score, val_status
 
-    rsrs_score = get_rsrs_score(stock_data, slope_series) # number
+    curr_rsrs_score = get_rsrs_score(stock_data, slope_series) # number
     volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
     shooting_signal = get_shooting_signal(stock_data) # None | TOP | BOTTOM
-    op = '' # 'BUY' | 'SELL' | 'HOLD'
+    stock_score = get_stock_score(stock_data)
+    op = 'HOLD' # BUY | SELL | HOLD
 
-    if rsrs_score >= score_threshold and volume_signal == 'VAL_UP' and shooting_signal != 'TOP':
+    if curr_rsrs_score >= score_threshold and volume_signal == 'VAL_UP':
         op = 'BUY'
-    elif rsrs_score <= -score_threshold and volume_signal == 'VAL_UP' and shooting_signal != 'TOP':
-        op = 'BUY'
-    elif rsrs_score >= score_threshold and volume_signal != 'VAL_UP' and shooting_signal == 'TOP':
+    elif curr_rsrs_score >= score_threshold and volume_signal == 'VAL_DOWN':
         op = 'SELL'
+    elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_DOWN':
+        op = 'SELL'
+    elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_UP':
+        op = 'BUY'
     else:
         op = 'HOLD'
-    return op, rsrs_score, volume_signal
 
+    return {
+        "op": op,
+        "rsrs_score": curr_rsrs_score,
+        "volume_signal": volume_signal,
+        "shooting_signal": shooting_signal,
+        "stock_score": stock_score,
+    }
+
+# 计算 rsrs 信号：https://zhuanlan.zhihu.com/p/33501881
 def get_rsrs_score(stock_data, slope_series):
-    # 计算 rsrs 信号
     high_low_data = stock_data[-N:]
     intercept, slope, r2 = get_ols(high_low_data.low, high_low_data.high)
     slope_series.append(slope)
@@ -88,22 +93,18 @@ def get_rsrs_score(stock_data, slope_series):
 
 # 成交量信号
 def get_volume_signal(stock_data):
-    # 当前值
-    curr_val = stock_data.turnover[-mean_day:].mean()
-    # 之前值
-    before_val = stock_data.turnover[-mean_day-mean_diff_day:-mean_diff_day].mean()
-    diff_volume = curr_val / before_val
-    if diff_volume >= 1 + volume_padding:
+    mean_day_value = stock_data.turnover[-mean_day:].mean()
+    mean_diff_day_value = stock_data.turnover[-mean_diff_day:].mean()
+    if mean_diff_day_value > mean_day_value:
         return 'VAL_UP'
-    elif diff_volume <= 1 - volume_padding:
-        return 'VAL_DOWN'
     else:
-        return 'VAL_STILL'
+        return 'VAL_DOWN'
 
 # 射击之星和锤头线信号
 def get_shooting_signal(stock_data):
     # 返回格式：None | 'TOP' | 'BOTTOM'
-    num = 5
+    num = 2
+    len_rate = 2 # 一般2-3倍
     top_num = 0
     button_num = 0
     latest_data = stock_data[-num:]
@@ -116,20 +117,20 @@ def get_shooting_signal(stock_data):
         upline_len = 0
         downline_len = 0
         # 收盘价高于开盘价
-        if close_price > open_price:
+        if close_price >= open_price:
             upline_len = abs(high_price - close_price)
             downline_len = abs(low_price - open_price)
         else:
             upline_len = abs(high_price - open_price)
             downline_len = abs(low_price - close_price)
-        if upline_len >= entity_len * 2:
+        if upline_len >= entity_len * len_rate:
             top_num += 1
-        if downline_len >= entity_len * 2:
+        if downline_len >= entity_len * len_rate:
             button_num += 1
     
-    if top_num >= 2:
+    if top_num == num:
         return 'TOP'
-    elif button_num >= 2:
+    elif button_num == num:
         return 'BOTTOM'
     else:
         return None
@@ -216,7 +217,7 @@ def initial_slope_series(general_stock, N, M):
     return [get_ols(general_stock.low[i:i+N], general_stock.high[i:i+N])[1] for i in range(M)]
 
 # 获取股票信号
-def get_stock_signal(stock_data):
+def get_stock_signals(stock_data):
     slope_series = initial_slope_series(stock_data, N, M)[:-1]
     return get_timing_signal(stock_data, slope_series)
 
@@ -226,18 +227,21 @@ def recall(stock_code):
     monkey_count = monkey_base
     stock_count = 0
     stock_data_all = get_code_data(stock_code)
+    if len(stock_data_all) == 0:
+        return f'''{stock_code} error'''
     max_retreat = 0 # 最大回撤百分比
     before_total = 0 # 当前总额
     keep_stocks = 0 # 用于比对的股数，一开始躺平不动
+    trade_num = 0 # 交易次数
 
     for i in range(recall_days):
         before_day = recall_days - i
         stock_data = stock_data_all[-before_day-N-M:-before_day]
-        timing_signal, rsrs_score, val_status = get_stock_signal(stock_data)
+        signals = get_stock_signals(stock_data)
         close_price = stock_data.close.values[-1]
-        is_buy = timing_signal == 'BUY'
-        is_sell = timing_signal == 'SELL'
-        info = f'''{stock_code} {i}/{recall_days} {timing_signal} {format(rsrs_score, '.2f')} {val_status} {format(close_price, '.2f')}'''
+        is_buy = signals['op'] == 'BUY'
+        is_sell = signals['op'] == 'SELL'
+        info = f'''{stock_code} {stock_data.time_key.values[-1][:10]} {signals['op']} {format(signals['rsrs_score'], '.2f')} {signals['volume_signal']} {format(close_price, '.2f')}'''
 
         if i == 0:
             keep_stocks = monkey_count / close_price
@@ -246,6 +250,7 @@ def recall(stock_code):
             stock_count = monkey_count / close_price
             monkey_count = 0
             before_total = stock_count * close_price
+            trade_num += 1
             print(info + ' 买入')
         elif is_sell and stock_count != 0:
             monkey_count = stock_count * close_price
@@ -255,15 +260,17 @@ def recall(stock_code):
                 curr_retreat = (before_total - monkey_count) / before_total * 100
                 if curr_retreat > max_retreat:
                     max_retreat = curr_retreat
+            trade_num += 1
             print(info + ' 卖出')
         else:
             print(info)
     final_close = stock_data_all.close.values[-1]
     total = monkey_count + stock_count * final_close
     keep_total = keep_stocks * final_close
-    op_res = format((total - monkey_base) / monkey_base * 100, '.2f')
-    no_op_res = format((keep_total - monkey_base) / monkey_base * 100, '.2f')
-    res = f'''{stock_code} 盈亏比：{op_res}% 躺平盈亏比：{no_op_res}% 最新单价：{final_close} 最大回撤：-{format(max_retreat, '.2f')}%'''
+    op_res = (total - monkey_base) / monkey_base * 100
+    no_op_res = (keep_total - monkey_base) / monkey_base * 100
+    is_win = op_res > no_op_res and op_res > 0
+    res = f'''{stock_code} 盈亏比：{format(op_res, '.2f')}% 躺平盈亏比：{format(no_op_res, '.2f')}% 最新单价：{final_close} 最大回撤：-{format(max_retreat, '.2f')}% 交易次数：{trade_num} 获胜：{is_win}'''
     print(res)
     return res
 
@@ -274,8 +281,9 @@ def batch_recall():
     p.close()
     p.join()
     info = '\r\n'.join(res)
+    win_len = len(re.findall('True', info))
     msg = f'''
-{current_dt} 近{recall_days}天回测结果
+{current_dt} 近{recall_days}天回测结果 胜率：{format(win_len / len(custom_stocks) * 100, '.2f')}%
 {info}
 '''
     print(msg)
@@ -307,21 +315,20 @@ def op_signal(stock_code):
     if curr_hour >= 22 or curr_hour < 5:
         stock_data = stock_data[:-1]
 
-    before_stock_signal, before_rsrs_score, before_val_status = get_stock_signal(stock_data[:-1])
-    curr_stock_signal, curr_rsrs_score, curr_val_status = get_stock_signal(stock_data)
+    before_signals = get_stock_signals(stock_data[:-1])
+    curr_signals = get_stock_signals(stock_data)
     prefix = ''
-    if before_stock_signal != curr_stock_signal:
-        if curr_stock_signal == 'BUY':
+    if before_signals['op'] != curr_signals['op']:
+        if curr_signals['op'] == 'BUY':
             prefix = '买 '
-        elif curr_stock_signal == 'SELL':
+        elif curr_signals['op'] == 'SELL':
             prefix = '卖 '
         else:
             prefix = '观察 '
-    res = f'''{prefix}{stock_code} 【{before_stock_signal}->{curr_stock_signal}】 【{format(curr_rsrs_score, '.2f')} {curr_val_status}】'''
+    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']}】'''
     return res
 
 if __name__ == "__main__":
     batch_recall()
-    # batch_op_signal(False)
+    # batch_op_signal()
 
-    # recall('US.AMC')
