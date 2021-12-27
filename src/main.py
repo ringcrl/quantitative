@@ -39,14 +39,26 @@ custom_stocks = [
     'US.DIA', # 道指
     'US.SPY', # 标普
 
+    # 持仓
     'HK.00700',
     'US.AMC',
 
+    # 观察
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
     'US.GOOGL',
     'US.BABA',
+
+    # 遵循胜率
+    'US.TTE',
+    'US.RTX',
+    'US.EL',
+    'US.NKE',
+    'US.UPS',
+    'US.MMM',
+    'US.SAP',
+    'US.XOM',
 ]
 win_num = 0 # 统计获胜比例
 
