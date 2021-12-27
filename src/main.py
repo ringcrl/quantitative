@@ -139,8 +139,12 @@ def get_shooting_signal(stock_data):
     else:
         return None
 
+# 按长度分组
+def cut(obj, sec):
+    return [obj[i:i+sec] for i in range(0,len(obj),sec)]
+
 # 根据市值，获取股票池
-def get_market_cap(market_val=50000000000):
+def get_market_cap(market_val=100000000000):
     quote_ctx = OpenQuoteContext(host='127.0.0.1', port=11111)
     simple_filter = SimpleFilter()
     simple_filter.stock_field = StockField.MARKET_VAL
@@ -231,8 +235,8 @@ def recall(stock_code):
     monkey_count = monkey_base
     stock_count = 0
     stock_data_all = get_code_data(stock_code)
-    if len(stock_data_all) == 0:
-        return f'''{stock_code} error'''
+    if stock_data_all is None or len(stock_data_all) < 900:
+        return f'''error {stock_code}'''
     max_retreat = 0 # 最大回撤百分比
     before_total = 0 # 当前总额
     keep_stocks = 0 # 用于比对的股数，一开始躺平不动
@@ -279,32 +283,56 @@ def recall(stock_code):
     return res
 
 # 批量运行回测
-def batch_recall():
-    p = Pool(len(custom_stocks))
-    res = p.map(recall, custom_stocks)    
-    p.close()
-    p.join()
-    info = '\r\n'.join(res)
+def batch_recall(is_custom=True):
+    stock_codes = []
+    if is_custom:
+        stock_codes = custom_stocks
+    else:
+        stock_codes = get_market_cap()
+    
+    info_list = []
+    group = cut([i for i in stock_codes], 10)
+    for group_stock_codes in group:
+        p = Pool(len(group_stock_codes))
+        res_list = p.map(recall, group_stock_codes)
+        info_list += res_list
+        p.close()
+        p.join()
+    filtered_info_list = []
+    for stock_info in info_list:
+        if stock_info.startswith('error'):
+            continue
+        filtered_info_list.append(stock_info)
+    info = '\r\n'.join(filtered_info_list)
     win_len = len(re.findall('True', info))
     msg = f'''
-{current_dt} 近{recall_days}天回测结果 胜率：{format(win_len / len(custom_stocks) * 100, '.2f')}%
-{info}
-'''
+{current_dt} 近{recall_days}天回测结果 胜率：{format(win_len / len(filtered_info_list) * 100, '.2f')}%
+{info}'''
     print(msg)
 
 # 批量获取自选股信号
 def batch_op_signal(is_custom=True):
-    stocks = []
+    stock_codes = []
     if is_custom:
-        stocks = custom_stocks
+        stock_codes = custom_stocks
     else:
-        stocks  = get_market_cap()
+        stock_codes  = get_market_cap()
+    
+    info_list = []
+    group = cut([i for i in stock_codes], 10)
+    for group_stock_codes in group:
+        p = Pool(len(group_stock_codes))
+        res_list = p.map(op_signal, group_stock_codes)
+        info_list += res_list
+        p.close()
+        p.join()
+    filtered_info_list = []
+    for stock_info in info_list:
+        if stock_info.startswith('error'):
+            continue
+        filtered_info_list.append(stock_info)
 
-    p = Pool(len(stocks))
-    res = p.map(op_signal, stocks)
-    p.close()
-    p.join()
-    info = '\r\n'.join(res)
+    info = '\r\n'.join(filtered_info_list)
     msg = f'''
 {current_dt} 操作信号
 {info}
@@ -314,6 +342,8 @@ def batch_op_signal(is_custom=True):
 
 def op_signal(stock_code):
     stock_data = get_code_data(stock_code)
+    if stock_data is None or len(stock_data) < 900:
+        return f'''error {stock_code}'''
 
     # 开盘中去掉今天的数据，防止成交量干扰
     if curr_hour >= 22 or curr_hour < 5:
@@ -333,6 +363,6 @@ def op_signal(stock_code):
     return res
 
 if __name__ == "__main__":
-    # batch_recall()
-    batch_op_signal()
-
+    # True 自定义列表、False 全市场列表
+    # batch_recall(True)
+    batch_op_signal(True)
