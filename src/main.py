@@ -30,6 +30,16 @@ current_dt = time.strftime("%Y-%m-%d", time.localtime())
 current_date = datetime.strptime(current_dt, '%Y-%m-%d')
 previous_date = current_date - timedelta(days = 1)
 curr_hour = time.localtime()[3]
+curr_min = time.localtime()[4]
+# 美国夏令时是中国21：30－4：00，非夏令时是22：30－5：00
+open_time = {
+    "h": 22,
+    "m": 30,
+}
+close_time = {
+    'h': 5,
+    'm': 0,
+}
 
 freq = 'K_DAY' # K_DAY | K_60M
 
@@ -357,9 +367,7 @@ def op_signal(stock_code):
     if stock_data is None or len(stock_data) < 900:
         return f'''error {stock_code}'''
 
-    # 开盘中去掉今天的数据，防止成交量干扰
-    if curr_hour >= 22 or curr_hour < 5:
-        stock_data = stock_data[:-1]
+    stock_data = get_adjust_data(stock_data)
 
     before_signals = get_stock_signals(stock_data[:-1])
     curr_signals = get_stock_signals(stock_data)
@@ -373,6 +381,27 @@ def op_signal(stock_code):
             prefix = '观察 '
     res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']}】'''
     return res
+
+# 开盘中成交量通过时间比例计算
+def get_adjust_data(stock_data):
+    _curr_hour = curr_hour
+    # 收盘中，直接用成交量
+    if curr_hour > close_time['h']:
+        if curr_hour < open_time['h'] or (curr_hour == open_time['h'] and curr_min < open_time['m']):
+            return stock_data
+    
+    # 开盘中，计算相对成交量
+    trade_min_per_day = 6.5 * 60
+    curr_trade_min = 0
+    if curr_hour == open_time['h']:
+        curr_trade_min = curr_min - open_time['m']
+    elif curr_hour < close_time['h']:
+        _curr_hour += 24
+        curr_trade_min = (_curr_hour - open_time['h']) * 60 + 30
+    rate = trade_min_per_day / curr_trade_min
+    stock_data['turnover'].values[-1] = stock_data['turnover'].values[-1] * rate
+    return stock_data
+
 
 if __name__ == "__main__":
     # True 自定义列表、False 全市场列表
