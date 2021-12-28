@@ -384,20 +384,21 @@ def op_signal(stock_code):
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
-    _curr_hour = curr_hour
     # 收盘中，直接用成交量
-    if curr_hour > close_time['h']:
-        if curr_hour < open_time['h'] or (curr_hour == open_time['h'] and curr_min < open_time['m']):
-            return stock_data
+    if curr_hour > close_time['h'] and curr_hour < open_time['h']:
+        return stock_data
+    elif curr_hour == open_time['h'] and curr_min < open_time['m']:
+        return stock_data
     
     # 开盘中，计算相对成交量
     trade_min_per_day = 6.5 * 60
     curr_trade_min = 0
     if curr_hour == open_time['h']:
         curr_trade_min = curr_min - open_time['m']
-    elif curr_hour < close_time['h']:
-        _curr_hour += 24
-        curr_trade_min = (_curr_hour - open_time['h']) * 60 + 30
+    elif curr_hour > open_time['h'] and curr_hour < 24:
+        curr_trade_min = (curr_hour - open_time['h']) * 60 - open_time['m'] + curr_min
+    elif curr_hour < open_time['h']:
+        curr_trade_min = (24 - open_time['h']) * 60 + open_time['h'] + curr_hour * 60 + curr_min
     rate = trade_min_per_day / curr_trade_min
     stock_data['turnover'].values[-1] = stock_data['turnover'].values[-1] * rate
     return stock_data
