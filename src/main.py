@@ -45,20 +45,22 @@ freq = 'K_DAY' # K_DAY | K_60M
 
 # 自选股
 custom_stocks = [
+    # 大盘
     'US.QQQ', # 纳指
     'US.DIA', # 道指
     'US.SPY', # 标普
 
     # 持仓
     'HK.00700',
-    'US.AMC',
 
     # 观察
+    'US.AMC',
     'US.TSLA',
     'US.NVDA',
     'US.AAPL',
     'US.GOOGL',
     'US.BABA',
+    'US.MU',
 
     # 遵循胜率
     'US.TTE',
@@ -87,13 +89,17 @@ def get_timing_signal(stock_data, slope_series):
     curr_rsrs_score = get_rsrs_score(stock_data, slope_series) # number
     volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
     shooting_signal = get_shooting_signal(stock_data) # None | TOP | BOTTOM
-    stock_score = get_stock_score(stock_data)
+    stock_score = get_stock_score(stock_data) # float
+    gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
     op = 'HOLD' # BUY | SELL | HOLD
 
     if curr_rsrs_score >= score_threshold and volume_signal == 'VAL_UP':
         op = 'BUY'
     elif curr_rsrs_score >= score_threshold and volume_signal == 'VAL_DOWN':
-        op = 'SELL'
+        if gmma_signal == 'GMMA_UP':
+            op = 'HOLD'
+        else:
+            op = 'SELL'
     elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_DOWN':
         op = 'SELL'
     elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_UP':
@@ -107,6 +113,7 @@ def get_timing_signal(stock_data, slope_series):
         "volume_signal": volume_signal,
         "shooting_signal": shooting_signal,
         "stock_score": stock_score,
+        "gmma_signal": gmma_signal,
     }
 
 # 计算 rsrs 信号：https://zhuanlan.zhihu.com/p/33501881
@@ -160,6 +167,32 @@ def get_shooting_signal(stock_data):
         return 'BOTTOM'
     else:
         return None
+
+def get_gmma_signal(close: np.array):
+    ema10 = get_ema(close, 10)[-1]
+    ema20 = get_ema(close, 20)[-1]
+    ema30 = get_ema(close, 30)[-1]
+    ema40 = get_ema(close, 40)[-1]
+    ema50 = get_ema(close, 50)[-1]
+    ema60 = get_ema(close, 60)[-1]
+
+    if ema10 > ema20 > ema30 > ema40 > ema50 > ema60:
+        return 'GMMA_UP'
+    elif ema10 < ema20 < ema30 < ema40 < ema50 < ema60:
+        return 'GMMA_DOWN'
+    else:
+        return 'GMMA_TWINE'
+
+# 获取 EMA
+def get_ema(close: np.array, timeperiod=5):
+    res = []
+    for i in range(len(close)):
+        if i < 1:
+            res.append(close[i])
+        else:
+            ema = (2 * close[i] + res[i-1] * (timeperiod-1)) / (timeperiod+1)
+            res.append(ema)
+    return np.array(res, dtype=np.double)
 
 # 按长度分组
 def cut(obj, sec):
@@ -379,7 +412,7 @@ def op_signal(stock_code):
             prefix = '卖 '
         else:
             prefix = '观察 '
-    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']}】'''
+    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']} {curr_signals['gmma_signal']}】'''
     return res
 
 # 开盘中成交量通过时间比例计算
