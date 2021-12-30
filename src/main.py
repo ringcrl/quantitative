@@ -49,11 +49,13 @@ custom_stocks = [
     'US.QQQ', # 纳指
     'US.DIA', # 道指
     'US.SPY', # 标普
+    'US.UVXY', # 恐慌指数
 
     # 持仓
     'HK.00700',
 
     # 观察
+    'US.FXI',
     'US.AMC',
     'US.TSLA',
     'US.NVDA',
