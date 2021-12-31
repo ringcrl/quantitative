@@ -414,7 +414,7 @@ def op_signal(stock_code):
             prefix = '卖 '
         else:
             prefix = '观察 '
-    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']} {curr_signals['gmma_signal']}】'''
+    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']} {curr_signals['gmma_signal']}】 {stock_data.close.values[-1]}'''
     return res
 
 # 开盘中成交量通过时间比例计算
