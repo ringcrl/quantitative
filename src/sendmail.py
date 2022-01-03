@@ -5,10 +5,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 import time
+from dotenv import dotenv_values
 
-sender = '' # 发件人邮箱账号
-sender_pass = '' # 发件人邮箱密码
-receiver = '' # 收件人邮箱账号
+config = dotenv_values(".env") 
+
+sender = config['sender'] # 发件人邮箱账号
+sender_pass = config['sender_pass'] # 发件人邮箱密码
+receiver = config['receiver'] # 收件人邮箱账号
 
 def send_mail(message):
     ret = True
@@ -16,14 +19,15 @@ def send_mail(message):
         current_dt = time.strftime("%Y-%m-%d", time.localtime())
         title = current_dt.split(" ")[0] + "投资操作"
         msg = MIMEText(message,'plain','utf-8')
-        msg['From'] = formataddr(["**", sender])         # 发件人昵称
-        msg['To'] = formataddr(["**", receiver])             # 接收人昵称
+        msg['From'] = formataddr(["chenng", sender])         # 发件人昵称
+        msg['To'] = formataddr(["chenng", receiver])             # 接收人昵称
         msg['Subject'] = title                              # 邮件的主题
 
         server = smtplib.SMTP_SSL("smtp.qq.com", 465)       # 发件人邮箱中的SMTP服务器，端口是465
         server.login(sender, sender_pass)  # 发件人邮箱账号、邮箱密码
         server.sendmail(sender, [receiver,], msg.as_string())  # 发件人邮箱账号、收件人邮箱账号、发送邮件
         server.quit()  # 关闭连接
+        print('邮件发送成功')
     except Exception as e:  # 如果 try 中的语句没有执行，则会执行下面的 ret = False
         ret = False
         print(e)

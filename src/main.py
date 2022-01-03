@@ -1,21 +1,3 @@
-'''
-- rsrs_score 修正标准分 = zscore * r2，效果最佳
-
-- 缩量上涨还会上涨
-- 缩量下跌还会下跌
-- 高位放巨量上涨必会下跌
-- 低位放巨量上涨必会回调
-- 低位放巨量下跌必会反弹
-- 放量滞涨顶部信号
-- 缩量不跌底部信号
-- 量大成头，量小成底
-- 顶部无量下跌后市还会创新高
-- 顶部放量下跌后市很难创新高
-- 小跌后的大跌买入
-- 看板块一开盘上涨，后面被大盘带下去的
-- 寻找稳量上涨的，放量时候出局
-'''
-
 #-*- coding:utf-8 -*-
 from datetime import datetime, timedelta
 from futu import *
@@ -23,7 +5,11 @@ import time
 import numpy as np
 import math
 from multiprocessing import Pool
-import re 
+import re
+from dotenv import dotenv_values
+from sendmail import send_mail
+
+config = dotenv_values(".env") 
 
 # 日期计算
 current_dt = time.strftime("%Y-%m-%d", time.localtime())
@@ -43,37 +29,14 @@ close_time = {
 
 freq = 'K_DAY' # K_DAY | K_60M
 
+isRecall = config['isRecall'] == 'True'
+
+general_stocks = config['general_stocks'].split('|')
+holding_stocks = config['holding_stocks'].split('|')
+watching_stocks = config['watching_stocks'].split('|')
+
 # 自选股
-custom_stocks = [
-    # 大盘
-    'US.QQQ', # 纳指
-    'US.DIA', # 道指
-    'US.SPY', # 标普
-    'US.UVXY', # 恐慌指数
-
-    # 持仓
-    'HK.00700',
-
-    # 观察
-    'US.FXI',
-    'US.AMC',
-    'US.TSLA',
-    'US.NVDA',
-    'US.AAPL',
-    'US.GOOGL',
-    'US.BABA',
-    'US.MU',
-
-    # 遵循胜率
-    'US.TTE',
-    'US.RTX',
-    'US.EL',
-    'US.NKE',
-    'US.UPS',
-    'US.MMM',
-    'US.SAP',
-    'US.XOM',
-]
+custom_stocks = general_stocks + holding_stocks + watching_stocks
 win_num = 0 # 统计获胜比例
 
 # 动量轮动参数
@@ -111,7 +74,7 @@ def get_timing_signal(stock_data, slope_series):
 
     return {
         "op": op,
-        "rsrs_score": curr_rsrs_score,
+        "rsrs_score": format(curr_rsrs_score, '.2f'),
         "volume_signal": volume_signal,
         "shooting_signal": shooting_signal,
         "stock_score": stock_score,
@@ -306,7 +269,7 @@ def recall(stock_code):
         close_price = stock_data.close.values[-1]
         is_buy = signals['op'] == 'BUY'
         is_sell = signals['op'] == 'SELL'
-        info = f'''{stock_code} {stock_data.time_key.values[-1][:10]} {signals['op']} {format(signals['rsrs_score'], '.2f')} {signals['volume_signal']} {format(close_price, '.2f')}'''
+        info = f'''{stock_code} {stock_data.time_key.values[-1][:10]} {signals['op']} {signals['rsrs_score']} {signals['volume_signal']} {format(close_price, '.2f')}'''
 
         if i == 0:
             keep_stocks = monkey_count / close_price
@@ -335,7 +298,10 @@ def recall(stock_code):
     op_res = (total - monkey_base) / monkey_base * 100
     no_op_res = (keep_total - monkey_base) / monkey_base * 100
     is_win = op_res > no_op_res and op_res > 0
-    res = f'''{stock_code} 盈亏比：{format(op_res, '.2f')}% 躺平盈亏比：{format(no_op_res, '.2f')}% 最新单价：{final_close} 最大回撤：-{format(max_retreat, '.2f')}% 交易次数：{trade_num} 获胜：{is_win}'''
+    op_res_str = format(op_res, '.2f')
+    no_op_res_str = format(no_op_res, '.2f')
+    max_retreat = format(max_retreat, '.2f')
+    res = f'''{stock_code} 盈亏比：{op_res_str}% 躺平盈亏比：{no_op_res_str}% 最新单价：{final_close} 最大回撤：-{max_retreat}% 交易次数：{trade_num} 获胜：{is_win}'''
     print(res)
     return res
 
@@ -362,8 +328,9 @@ def batch_recall(is_custom=True):
         filtered_info_list.append(stock_info)
     info = '\r\n'.join(filtered_info_list)
     win_len = len(re.findall('True', info))
+    win_rate = format(win_len / len(filtered_info_list) * 100, '.2f')
     msg = f'''
-{current_dt} 近{recall_days}天回测结果 胜率：{format(win_len / len(filtered_info_list) * 100, '.2f')}%
+{current_dt} 近{recall_days}天回测结果 胜率：{win_rate}%
 {info}'''
     print(msg)
 
@@ -395,6 +362,7 @@ def batch_op_signal(is_custom=True):
 {info}
 '''
     print(msg)
+    return msg
 
 
 def op_signal(stock_code):
@@ -404,17 +372,17 @@ def op_signal(stock_code):
 
     stock_data = get_adjust_data(stock_data)
 
-    before_signals = get_stock_signals(stock_data[:-1])
-    curr_signals = get_stock_signals(stock_data)
+    before_s = get_stock_signals(stock_data[:-1])
+    curr_s = get_stock_signals(stock_data)
     prefix = ''
-    if before_signals['op'] != curr_signals['op']:
-        if curr_signals['op'] == 'BUY':
+    if before_s['op'] != curr_s['op']:
+        if curr_s['op'] == 'BUY':
             prefix = '买 '
-        elif curr_signals['op'] == 'SELL':
+        elif curr_s['op'] == 'SELL':
             prefix = '卖 '
         else:
             prefix = '观察 '
-    res = f'''{prefix}{stock_code} 【{before_signals['op']}->{curr_signals['op']}】 【{format(curr_signals['rsrs_score'], '.2f')} {curr_signals['volume_signal']} {curr_signals['gmma_signal']}】 {stock_data.close.values[-1]}'''
+    res = f''' {prefix}{stock_code} {stock_data.close.values[-1]} 【{before_s['op']}->{curr_s['op']}】【{before_s['rsrs_score']}->{curr_s['rsrs_score']}】【{before_s['volume_signal']}->{curr_s['volume_signal']}】【{before_s['gmma_signal']}->{curr_s['gmma_signal']}】'''
     return res
 
 # 开盘中成交量通过时间比例计算
@@ -441,5 +409,9 @@ def get_adjust_data(stock_data):
 
 if __name__ == "__main__":
     # True 自定义列表、False 全市场列表
-    # batch_recall(True)
-    batch_op_signal(True)
+
+    if isRecall:
+        batch_recall(True)
+    else:
+        msg = batch_op_signal(True)
+        send_mail(msg)
