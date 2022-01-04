@@ -31,12 +31,18 @@ freq = 'K_DAY' # K_DAY | K_60M
 
 isRecall = config['isRecall'] == 'True'
 
-general_stocks = config['general_stocks'].split('|')
-holding_stocks = config['holding_stocks'].split('|')
-watching_stocks = config['watching_stocks'].split('|')
+general_stocks = config.get('general_stocks')
+holding_stocks = config.get('holding_stocks')
+watching_stocks = config.get('watching_stocks')
+test_stocks = config.get('test_stocks')
+
+general_stocks = general_stocks.split('|') if general_stocks else []
+holding_stocks = holding_stocks.split('|') if holding_stocks else []
+watching_stocks = watching_stocks.split('|') if watching_stocks else []
+test_stocks = test_stocks.split('|') if test_stocks else []
 
 # 自选股
-custom_stocks = holding_stocks + general_stocks + watching_stocks
+custom_stocks = holding_stocks + general_stocks + watching_stocks + test_stocks
 win_num = 0 # 统计获胜比例
 
 # 动量轮动参数
@@ -263,13 +269,19 @@ def recall(stock_code):
     trade_num = 0 # 交易次数
 
     for i in range(recall_days):
-        before_day = recall_days - i
-        stock_data = stock_data_all[-before_day-N-M:-before_day]
+        before_day = recall_days - i - 1
+        split_a = -before_day-N-M
+        split_b = -before_day
+        stock_data = stock_data_all[split_a:split_b]
+        if before_day == 0:
+            stock_data = stock_data_all[split_a:]
         signals = get_stock_signals(stock_data)
         close_price = stock_data.close.values[-1]
         is_buy = signals['op'] == 'BUY'
         is_sell = signals['op'] == 'SELL'
-        info = f'''{stock_code} {stock_data.time_key.values[-1][:10]} {signals['op']} {signals['rsrs_score']} {signals['volume_signal']} {format(close_price, '.2f')}'''
+        curr_date = stock_data.time_key.values[-1][:10]
+        close_price_str = format(close_price, '.2f')
+        info = f'''{stock_code} {curr_date} {signals['op']} {signals['rsrs_score']} {signals['volume_signal']} {signals['shooting_signal']} {signals['gmma_signal']} {close_price_str}'''
 
         if i == 0:
             keep_stocks = monkey_count / close_price
