@@ -31,13 +31,13 @@ freq = 'K_DAY' # K_DAY | K_60M
 
 isRecall = config['isRecall'] == 'True'
 
-general_stocks = config.get('general_stocks')
 holding_stocks = config.get('holding_stocks')
+general_stocks = config.get('general_stocks')
 watching_stocks = config.get('watching_stocks')
 test_stocks = config.get('test_stocks')
 
-general_stocks = general_stocks.split('|') if general_stocks else []
 holding_stocks = holding_stocks.split('|') if holding_stocks else []
+general_stocks = general_stocks.split('|') if general_stocks else []
 watching_stocks = watching_stocks.split('|') if watching_stocks else []
 test_stocks = test_stocks.split('|') if test_stocks else []
 
