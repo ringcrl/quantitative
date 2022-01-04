@@ -36,7 +36,7 @@ holding_stocks = config['holding_stocks'].split('|')
 watching_stocks = config['watching_stocks'].split('|')
 
 # 自选股
-custom_stocks = general_stocks + holding_stocks + watching_stocks
+custom_stocks = holding_stocks + general_stocks + watching_stocks
 win_num = 0 # 统计获胜比例
 
 # 动量轮动参数

@@ -2,6 +2,7 @@
 
 - 新闻：https://cn.tradingview.com/news/
 - 分析：https://coin.wztctech.com/rs.php/dashboard
+- 视频：https://www.youtube.com/channel/UC6hhtmnety48C4IbUo2GKWA/videos
 
 # 运行
 
