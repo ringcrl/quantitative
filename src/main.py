@@ -29,7 +29,8 @@ close_time = {
 
 freq = 'K_DAY' # K_DAY | K_60M
 
-isRecall = config['isRecall'] == 'True'
+is_recall = config['is_recall'] == 'True'
+is_send_email = config['is_recall'] == 'True'
 
 holding_stocks = config.get('holding_stocks')
 general_stocks = config.get('general_stocks')
@@ -64,16 +65,16 @@ def get_timing_signal(stock_data, slope_series):
     gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
     op = 'HOLD' # BUY | SELL | HOLD
 
-    if curr_rsrs_score >= score_threshold and volume_signal == 'VAL_UP':
+    if curr_rsrs_score >= score_threshold and volume_signal >= 1:
         op = 'BUY'
-    elif curr_rsrs_score >= score_threshold and volume_signal == 'VAL_DOWN':
+    elif curr_rsrs_score >= score_threshold and volume_signal < 1:
         if gmma_signal == 'GMMA_UP':
             op = 'HOLD'
         else:
             op = 'SELL'
-    elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_DOWN':
+    elif curr_rsrs_score <= -score_threshold and volume_signal < 1:
         op = 'SELL'
-    elif curr_rsrs_score <= -score_threshold and volume_signal == 'VAL_UP':
+    elif curr_rsrs_score <= -score_threshold and volume_signal > 1:
         op = 'BUY'
     else:
         op = 'HOLD'
@@ -99,6 +100,7 @@ def get_rsrs_score(stock_data, slope_series):
 def get_volume_signal(stock_data):
     mean_day_value = stock_data.turnover[-mean_day:].mean()
     mean_diff_day_value = stock_data.turnover[-mean_diff_day:].mean()
+    return mean_diff_day_value / mean_day_value
     if mean_diff_day_value > mean_day_value:
         return 'VAL_UP'
     else:
@@ -394,7 +396,12 @@ def op_signal(stock_code):
             prefix = '卖 '
         else:
             prefix = '观察 '
-    res = f''' {prefix}{stock_code} {stock_data.close.values[-1]} 【{before_s['op']}->{curr_s['op']}】【{before_s['rsrs_score']}->{curr_s['rsrs_score']}】【{before_s['volume_signal']}->{curr_s['volume_signal']}】【{before_s['gmma_signal']}->{curr_s['gmma_signal']}】'''
+    op = f'''【{before_s['op']}->{curr_s['op']}】'''
+    vol = f'''【{format(before_s['volume_signal'], '.2f')}->{format(curr_s['volume_signal'], '.2f')}】'''
+    gmma = f'''【{before_s['gmma_signal']}->{curr_s['gmma_signal']}】'''
+    rsrs = f'''【{before_s['rsrs_score']}->{curr_s['rsrs_score']}】'''
+    close_price = format(stock_data.close.values[-1], '.2f')
+    res = f''' {prefix}{stock_code} {close_price} {op} {rsrs} {vol} {gmma}'''
     return res
 
 # 开盘中成交量通过时间比例计算
@@ -413,7 +420,7 @@ def get_adjust_data(stock_data):
     elif curr_hour > open_time['h'] and curr_hour < 24:
         curr_trade_min = (curr_hour - open_time['h']) * 60 - open_time['m'] + curr_min
     elif curr_hour < open_time['h']:
-        curr_trade_min = (24 - open_time['h']) * 60 + open_time['h'] + curr_hour * 60 + curr_min
+        curr_trade_min = (24 - open_time['h']) * 60 - open_time['m'] + curr_hour * 60 + curr_min
     rate = trade_min_per_day / curr_trade_min
     stock_data['turnover'].values[-1] = stock_data['turnover'].values[-1] * rate
     return stock_data
@@ -422,8 +429,9 @@ def get_adjust_data(stock_data):
 if __name__ == "__main__":
     # True 自定义列表、False 全市场列表
 
-    if isRecall:
+    if is_recall:
         batch_recall(True)
     else:
         msg = batch_op_signal(True)
-        send_mail(msg)
+        if is_send_email:
+            send_mail(msg)
