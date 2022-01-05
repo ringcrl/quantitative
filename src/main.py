@@ -30,7 +30,7 @@ close_time = {
 freq = 'K_DAY' # K_DAY | K_60M
 
 is_recall = config['is_recall'] == 'True'
-is_send_email = config['is_recall'] == 'True'
+is_send_email = config['is_send_email'] == 'True'
 
 holding_stocks = config.get('holding_stocks')
 general_stocks = config.get('general_stocks')
