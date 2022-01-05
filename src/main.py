@@ -330,6 +330,7 @@ def batch_recall(is_custom=True):
 {current_dt} 近{RECALL_DAYS}天回测结果 胜率：{win_rate}%
 {info}'''
     print(msg)
+    return msg
 
 # 批量获取自选股信号
 def batch_op_signal(is_custom=True):
@@ -448,9 +449,11 @@ def get_adjust_data(stock_data):
 if __name__ == "__main__":
     # True 自定义列表、False 全市场列表
 
+    msg = ''
     if is_recall:
-        batch_recall(True)
+        msg = batch_recall(True)        
     else:
         msg = batch_op_signal(True)
-        if is_send_email:
-            send_mail(msg)
+
+    if is_send_email:
+        send_mail(msg)
