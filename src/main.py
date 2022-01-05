@@ -101,10 +101,10 @@ def get_volume_signal(stock_data):
     mean_day_value = stock_data.turnover[-mean_day:].mean()
     mean_diff_day_value = stock_data.turnover[-mean_diff_day:].mean()
     return mean_diff_day_value / mean_day_value
-    if mean_diff_day_value > mean_day_value:
-        return 'VAL_UP'
-    else:
-        return 'VAL_DOWN'
+    # if mean_diff_day_value > mean_day_value:
+    #     return 'VAL_UP'
+    # else:
+    #     return 'VAL_DOWN'
 
 # 射击之星和锤头线信号
 def get_shooting_signal(stock_data):
@@ -277,13 +277,14 @@ def recall(stock_code):
         stock_data = stock_data_all[split_a:split_b]
         if before_day == 0:
             stock_data = stock_data_all[split_a:]
-        signals = get_stock_signals(stock_data)
+        curr_s = get_stock_signals(stock_data)
+        before_s = get_stock_signals(stock_data[:-1])
         close_price = stock_data.close.values[-1]
-        is_buy = signals['op'] == 'BUY'
-        is_sell = signals['op'] == 'SELL'
+        is_buy = curr_s['op'] == 'BUY' and before_s['op'] == 'BUY'
+        is_sell = curr_s['op'] == 'SELL' and before_s['op'] == 'SELL'
         curr_date = stock_data.time_key.values[-1][:10]
         close_price_str = format(close_price, '.2f')
-        info = f'''{stock_code} {curr_date} {signals['op']} {signals['rsrs_score']} {signals['volume_signal']} {signals['shooting_signal']} {signals['gmma_signal']} {close_price_str}'''
+        info = f'''{stock_code} {curr_date} {curr_s['op']} {curr_s['rsrs_score']} {format(curr_s['volume_signal'], '.2f')} {curr_s['shooting_signal']} {curr_s['gmma_signal']} {close_price_str}'''
 
         if i == 0:
             keep_stocks = monkey_count / close_price
@@ -386,20 +387,21 @@ def op_signal(stock_code):
 
     stock_data = get_adjust_data(stock_data)
 
-    before_s = get_stock_signals(stock_data[:-1])
-    curr_s = get_stock_signals(stock_data)
+    a_s = get_stock_signals(stock_data[:-2])
+    b_s = get_stock_signals(stock_data[:-1])
+    c_s = get_stock_signals(stock_data)
     prefix = ''
-    if before_s['op'] != curr_s['op']:
-        if curr_s['op'] == 'BUY':
+    if b_s['op'] != c_s['op']:
+        if c_s['op'] == 'BUY':
             prefix = '买 '
-        elif curr_s['op'] == 'SELL':
+        elif c_s['op'] == 'SELL':
             prefix = '卖 '
         else:
             prefix = '观察 '
-    op = f'''【{before_s['op']}->{curr_s['op']}】'''
-    vol = f'''【{format(before_s['volume_signal'], '.2f')}->{format(curr_s['volume_signal'], '.2f')}】'''
-    gmma = f'''【{before_s['gmma_signal']}->{curr_s['gmma_signal']}】'''
-    rsrs = f'''【{before_s['rsrs_score']}->{curr_s['rsrs_score']}】'''
+    op = f'''【{a_s['op']}->{b_s['op']}->{c_s['op']}】'''
+    vol = f'''【{format(a_s['volume_signal'], '.2f')}->{format(b_s['volume_signal'], '.2f')}->{format(c_s['volume_signal'], '.2f')}】'''
+    gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
+    rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
     close_price = format(stock_data.close.values[-1], '.2f')
     res = f''' {prefix}{stock_code} {close_price} {op} {rsrs} {vol} {gmma}'''
     return res
