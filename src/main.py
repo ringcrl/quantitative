@@ -49,40 +49,24 @@ win_num = 0 # 统计获胜比例
 # 动量轮动参数
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天，18
 M = 200 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
-score_threshold = 0.4 # rsrs 标准分指标阈值
-mean_day = 50 # 计算结束值，参考最近 mean_day
-mean_diff_day = 5 # 计算初始值，参考(mean_day + mean_diff_day)天前，窗口为 mean_diff_day 的一段时间
-recall_days = 250 # 回测天数
-stop_loss = 0.98 # 止损点位
+RSRS_THRESHOLD = 0.4 # rsrs 标准分指标阈值
+MEAN_DAY = 50 # 计算结束值，参考最近 MEAN_DAY
+MEAN_DIFF_DAY = 5 # 计算初始值，参考(MEAN_DAY + MEAN_DIFF_DAY)天前，窗口为 MEAN_DIFF_DAY 的一段时间
+RECALL_DAYS = 250 # 回测天数
+STOP_LOSS = 0.98 # 止损点位
 
 # 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, slope_series):
     # 返回格式：stock_signal, rsrs_score, val_status
 
-    curr_rsrs_score = get_rsrs_score(stock_data, slope_series) # number
+    rsrs_score = get_rsrs_score(stock_data, slope_series) # number
     volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
     shooting_signal = get_shooting_signal(stock_data) # None | TOP | BOTTOM
     stock_score = get_stock_score(stock_data) # float
     gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
-    op = 'HOLD' # BUY | SELL | HOLD
-
-    if curr_rsrs_score >= score_threshold and volume_signal >= 1:
-        op = 'BUY'
-    elif curr_rsrs_score >= score_threshold and volume_signal < 1:
-        if gmma_signal.startswith('GMMA_UP'):
-            op = 'HOLD'
-        else:
-            op = 'SELL'
-    elif curr_rsrs_score <= -score_threshold and volume_signal < 1:
-        op = 'SELL'
-    elif curr_rsrs_score <= -score_threshold and volume_signal > 1:
-        op = 'BUY'
-    else:
-        op = 'HOLD'
-
+    
     return {
-        "op": op,
-        "rsrs_score": format(curr_rsrs_score, '.2f'),
+        "rsrs_score": round(rsrs_score, 2),
         "volume_signal": volume_signal,
         "shooting_signal": shooting_signal,
         "stock_score": stock_score,
@@ -99,13 +83,9 @@ def get_rsrs_score(stock_data, slope_series):
 
 # 成交量信号
 def get_volume_signal(stock_data):
-    mean_day_value = stock_data.turnover[-mean_day:].mean()
-    mean_diff_day_value = stock_data.turnover[-mean_diff_day:].mean()
+    mean_day_value = stock_data.turnover[-MEAN_DAY:].mean()
+    mean_diff_day_value = stock_data.turnover[-MEAN_DIFF_DAY:].mean()
     return mean_diff_day_value / mean_day_value
-    # if mean_diff_day_value > mean_day_value:
-    #     return 'VAL_UP'
-    # else:
-    #     return 'VAL_DOWN'
 
 # 射击之星和锤头线信号
 def get_shooting_signal(stock_data):
@@ -151,11 +131,14 @@ def get_gmma_signal(close: np.array):
     ema60 = get_ema(close, 60)[-1]
 
     if ema10 > ema20 > ema30 > ema40 > ema50 > ema60:
-        return f'''GMMA_UP(支撑:{format(ema50, '.2f')} 止损:{format(ema60 * stop_loss, '.2f')}）'''
+        # 多头|止损|支撑
+        return f'''GMMA_UP|{round(ema60 * STOP_LOSS, 2)}|{round(ema50, 2)}'''
     elif ema10 < ema20 < ema30 < ema40 < ema50 < ema60:
-        return f'''GMMA_DOWN(压力:{format(ema30, '.2f')} 止损:{format(ema10 * stop_loss, '.2f')})'''
+        # 空头|止损|支撑
+        return f'''GMMA_DOWN|{round(ema10 * STOP_LOSS, 2)}|{round(ema30, 2)}'''
     else:
-        return f'''GMMA_TWINE(止损:{format(ema10 * stop_loss, '.2f')})'''
+        # 缠绕|止损|支撑
+        return f'''GMMA_TWINE|{round(ema10 * STOP_LOSS, 2)}|{round(ema10, 2)}'''
 
 # 获取 EMA
 def get_ema(close: np.array, timeperiod=5):
@@ -219,7 +202,7 @@ def get_code_data(code, freq=freq, count=1000):
 
 # 获取股票得分
 def get_stock_score(stock_data):
-        # 收盘价
+    # 收盘价
     y = stock_data['log'] = np.log(stock_data.close)
     # 分析的数据个数（天）
     x = stock_data['num'] = np.arange(stock_data.log.size)
@@ -271,8 +254,8 @@ def recall(stock_code):
     keep_stocks = 0 # 用于比对的股数，一开始躺平不动
     trade_num = 0 # 交易次数
 
-    for i in range(recall_days):
-        before_day = recall_days - i - 1
+    for i in range(RECALL_DAYS):
+        before_day = RECALL_DAYS - i - 1
         split_a = -before_day-N-M
         split_b = -before_day
         stock_data = stock_data_all[split_a:split_b]
@@ -280,8 +263,8 @@ def recall(stock_code):
             stock_data = stock_data_all[split_a:]
         signal_str = op_signal(stock_data)
         close_price = stock_data.close.values[-1]
-        is_buy = signal_str.startswith('买')
-        is_sell = signal_str.startswith('卖')
+        is_buy = signal_str.startswith('BUY')
+        is_sell = signal_str.startswith('SELL')
         curr_date = stock_data.time_key.values[-1][:10]
         info = f'''{curr_date} {signal_str}'''
 
@@ -312,9 +295,9 @@ def recall(stock_code):
     op_res = (total - monkey_base) / monkey_base * 100
     no_op_res = (keep_total - monkey_base) / monkey_base * 100
     is_win = op_res > no_op_res and op_res > 0
-    op_res_str = format(op_res, '.2f')
-    no_op_res_str = format(no_op_res, '.2f')
-    max_retreat = format(max_retreat, '.2f')
+    op_res_str = round(op_res, 2)
+    no_op_res_str = round(no_op_res, 2)
+    max_retreat = round(max_retreat, 2)
     res = f'''{stock_code} 盈亏比：{op_res_str}% 躺平盈亏比：{no_op_res_str}% 最新单价：{final_close} 最大回撤：-{max_retreat}% 交易次数：{trade_num} 获胜：{is_win}'''
     print(res)
     return res
@@ -342,9 +325,9 @@ def batch_recall(is_custom=True):
         filtered_info_list.append(stock_info)
     info = '\r\n'.join(filtered_info_list)
     win_len = len(re.findall('True', info))
-    win_rate = format(win_len / len(filtered_info_list) * 100, '.2f')
+    win_rate = round(win_len / len(filtered_info_list) * 100, 2)
     msg = f'''
-{current_dt} 近{recall_days}天回测结果 胜率：{win_rate}%
+{current_dt} 近{RECALL_DAYS}天回测结果 胜率：{win_rate}%
 {info}'''
     print(msg)
 
@@ -382,7 +365,6 @@ def get_stock_signal(stock_code):
     stock_data = get_code_data(stock_code)
     return op_signal(stock_data)
 
-
 def op_signal(stock_data):
     stock_code = stock_data.code.values[0]
     stock_data = get_adjust_data(stock_data)
@@ -390,22 +372,56 @@ def op_signal(stock_data):
     a_s = get_stock_signals(stock_data[:-2])
     b_s = get_stock_signals(stock_data[:-1])
     c_s = get_stock_signals(stock_data)
-    prefix = ''
-    if b_s['op'] != c_s['op']:
-        if c_s['op'] == 'BUY':
-            prefix = '买 '
-        elif c_s['op'] == 'SELL':
-            prefix = '卖 '
-        else:
-            prefix = '观察 '
-    close_prices = f'''【{format(stock_data.close.values[-3], '.2f')}->{format(stock_data.close.values[-2], '.2f')}->{format(stock_data.close.values[-1], '.2f')}】'''
-    op = f'''【{a_s['op']}->{b_s['op']}->{c_s['op']}】'''
-    vol = f'''【{format(a_s['volume_signal'], '.2f')}->{format(b_s['volume_signal'], '.2f')}->{format(c_s['volume_signal'], '.2f')}】'''
+
+    close_prices = f'''【{round(stock_data.close.values[-3], 2)}->{round(stock_data.close.values[-2], 2)}->{round(stock_data.close.values[-1], 2)}】'''
+
+    op = get_op(close_prices, a_s, b_s, c_s)
+
+    vol = f'''【{round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}】'''
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
     rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
     
-    res = f'''{prefix}{stock_code} {close_prices} {op} {rsrs} {vol} {gmma}'''
+    res = f'''{op} {stock_code} {close_prices} {rsrs} {vol} {gmma}'''
     return res
+
+def get_op(close_prices, a_s, b_s, c_s):
+    # 止损
+    # [gmma, stop_loss, key_point] = c_s['gmma_signal'].split('|')
+    # if close_prices < stop_loss:
+    #     return 'SELL'
+    
+    # 支撑位买入
+    # if gmma == 'GMMA_UP':
+    #     if close_prices <= key_point:
+    #         return 'BUY'
+    
+    # # 阻力位卖出
+    # if gmma == 'GMMA_DOWN':
+    #     if close_prices >= key_point:
+    #         return 'SELL'
+
+    rsrs_score = c_s['rsrs_score']
+    volume_signal = c_s['volume_signal']
+    gmma_signal = c_s['gmma_signal']
+
+    if rsrs_score >= RSRS_THRESHOLD and volume_signal >= 1:
+        return 'BUY'
+    elif rsrs_score >= RSRS_THRESHOLD and volume_signal < 1:
+        if not gmma_signal.startswith('GMMA_UP'):
+            return 'SELL'
+        if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
+            return 'BUY'
+
+    elif rsrs_score <= -RSRS_THRESHOLD and volume_signal < 1:
+        if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
+            return 'BUY'
+        else:
+            return 'SELL'
+    elif rsrs_score <= -RSRS_THRESHOLD and volume_signal >= 1:
+        return 'BUY'
+
+    # 无信号
+    return ''
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
