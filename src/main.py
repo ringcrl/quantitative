@@ -398,12 +398,13 @@ def op_signal(stock_code):
             prefix = '卖 '
         else:
             prefix = '观察 '
+    close_prices = f'''【{format(stock_data.close.values[-3], '.2f')}->{format(stock_data.close.values[-2], '.2f')}->{format(stock_data.close.values[-1], '.2f')}】'''
     op = f'''【{a_s['op']}->{b_s['op']}->{c_s['op']}】'''
     vol = f'''【{format(a_s['volume_signal'], '.2f')}->{format(b_s['volume_signal'], '.2f')}->{format(c_s['volume_signal'], '.2f')}】'''
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
     rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
-    close_price = format(stock_data.close.values[-1], '.2f')
-    res = f''' {prefix}{stock_code} {close_price} {op} {rsrs} {vol} {gmma}'''
+    
+    res = f''' {prefix}{stock_code} {close_prices} {op} {rsrs} {vol} {gmma}'''
     return res
 
 # 开盘中成交量通过时间比例计算
