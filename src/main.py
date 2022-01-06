@@ -382,7 +382,8 @@ def op_signal(stock_data):
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
     rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
     
-    res = f'''{op} {stock_code} {close_prices} {rsrs} {vol} {gmma}'''
+    res = f'''{op} {stock_code}
+{close_prices} {rsrs} {vol} {gmma}'''
     return res
 
 def get_op(close_prices, a_s, b_s, c_s):
