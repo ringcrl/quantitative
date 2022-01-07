@@ -354,7 +354,12 @@ def batch_op_signal(is_custom=True):
             continue
         filtered_info_list.append(stock_info)
 
-    info = '\r\n'.join(filtered_info_list)
+
+    buy_list = [item for item in filtered_info_list if item.startswith('BUY')]
+    sell_list = [item for item in filtered_info_list if item.startswith('SELL')]
+    not_list = [item for item in filtered_info_list if (not item.startswith('SELL') and (not item.startswith('BUY')))]
+    total_list = buy_list + sell_list + not_list
+    info = '\r\n'.join(total_list)
     msg = f'''
 {current_dt} 操作信号
 {info}
@@ -381,12 +386,25 @@ def op_signal(stock_data):
     vol = f'''【{round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}】'''
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
     rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
-    
-    res = f'''{op} {stock_code}
-{close_prices} {rsrs} {vol} {gmma}'''
+    gmma_info = c_s['gmma_signal'].split('|')
+    latest_price = round(stock_data.close.values[-1], 2)
+    point_signal = ''
+    if gmma_info[0] == 'GMMA_UP':
+        point_signal = '支撑'
+    elif gmma_info[0] == 'GMMA_DOWN':
+        point_signal = '阻力'
+    else:
+        point_signal = '缠绕'
+    point_info = f'''{point_signal}:{gmma_info[2]}({round((float(gmma_info[2]) - latest_price) / latest_price, 2) * 100}%) 止损:{gmma_info[1]}'''
+
+    # {close_prices} {gmma}
+    res = f'''{op}{stock_code} {latest_price} {point_info} rsrs:{rsrs} vol:{vol}'''
     return res
 
 def get_op(close_prices, a_s, b_s, c_s):
+    BUY = 'BUY】'
+    SELL = 'SELL】'
+    NONE_INFO = ''
     # 止损
     # [gmma, stop_loss, key_point] = c_s['gmma_signal'].split('|')
     # if close_prices < stop_loss:
@@ -407,23 +425,23 @@ def get_op(close_prices, a_s, b_s, c_s):
     gmma_signal = c_s['gmma_signal']
 
     if rsrs_score >= RSRS_THRESHOLD and volume_signal >= 1:
-        return 'BUY'
+        return BUY
     elif rsrs_score >= RSRS_THRESHOLD and volume_signal < 1:
         if not gmma_signal.startswith('GMMA_UP'):
-            return 'SELL'
+            return SELL
         if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
-            return 'BUY'
+            return BUY
 
     elif rsrs_score <= -RSRS_THRESHOLD and volume_signal < 1:
         if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
-            return 'BUY'
+            return BUY
         else:
-            return 'SELL'
+            return SELL
     elif rsrs_score <= -RSRS_THRESHOLD and volume_signal >= 1:
-        return 'BUY'
+        return BUY
 
     # 无信号
-    return ''
+    return NONE_INFO
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):

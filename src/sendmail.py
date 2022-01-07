@@ -17,7 +17,7 @@ def send_mail(message):
     ret = True
     try:
         current_dt = time.strftime("%Y-%m-%d", time.localtime())
-        title = current_dt.split(" ")[0] + "投资操作"
+        title = current_dt.split(" ")[0] + "操作"
         msg = MIMEText(message,'plain','utf-8')
         msg['From'] = formataddr(["chenng", sender])         # 发件人昵称
         msg['To'] = ','.join(receivers)             # 接收人昵称
