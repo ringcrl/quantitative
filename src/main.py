@@ -27,6 +27,8 @@ close_time = {
     'm': 0,
 }
 
+GENERAL_MATCH = r'QQQ|DIA|SPY|UVXY'
+
 freq = 'K_DAY' # K_DAY | K_60M
 
 is_recall = config['is_recall'] == 'True'
@@ -354,15 +356,29 @@ def batch_op_signal(is_custom=True):
             continue
         filtered_info_list.append(stock_info)
 
+    general_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is not None]
+    custom_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is None]
+    buy_list_up = [item for item in custom_list if item.startswith('BUY') and '支撑' in item]
+    buy_list_down = [item for item in custom_list if item.startswith('BUY') and '阻力' in item]
+    buy_list_twine = [item for item in custom_list if item.startswith('BUY') and '缠绕' in item]
+    sell_list = [item for item in custom_list if item.startswith('SELL')]
+    not_list = [item for item in custom_list if (not item.startswith('SELL') and (not item.startswith('BUY')))]
+    
+    general_info = '大盘趋势：\r\n' + '\r\n'.join(general_list)
+    buy_info_up = '上升趋势：\r\n' + '\r\n'.join(buy_list_up)
+    buy_info_down = '下降趋势：\r\n' + '\r\n'.join(buy_list_down)
+    buy_info_twine = '缠绕趋势：\r\n' + '\r\n'.join(buy_list_twine)
+    sell_info = '卖出列表：\r\n' + '\r\n'.join(sell_list)
+    not_info = '其他列表：\r\n' + '\r\n'.join(not_list)
 
-    buy_list = [item for item in filtered_info_list if item.startswith('BUY')]
-    sell_list = [item for item in filtered_info_list if item.startswith('SELL')]
-    not_list = [item for item in filtered_info_list if (not item.startswith('SELL') and (not item.startswith('BUY')))]
-    total_list = buy_list + sell_list + not_list
-    info = '\r\n'.join(total_list)
     msg = f'''
 {current_dt} 操作信号
-{info}
+{general_info}
+{buy_info_up}
+{buy_info_down}
+{buy_info_twine}
+{sell_info}
+{not_info}
 '''
     print(msg)
     return msg
@@ -395,7 +411,15 @@ def op_signal(stock_data):
         point_signal = '阻力'
     else:
         point_signal = '缠绕'
-    point_info = f'''{point_signal}:{gmma_info[2]}({round((float(gmma_info[2]) - latest_price) / latest_price, 2) * 100}%) 止损:{gmma_info[1]}'''
+    key_money = ((float(gmma_info[2]) - latest_price) / latest_price) * 100
+    stop_loss_monkey = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
+    if point_signal == '缠绕':
+        if key_money > 0:
+            point_signal += '顶部'
+        else:
+            point_signal += '底部'
+
+    point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%) 止损:{gmma_info[1]}({round(stop_loss_monkey, 2)}%)'''
 
     # {close_prices} {gmma}
     res = f'''{op}{stock_code} {latest_price} {point_info} rsrs:{rsrs} vol:{vol}'''
