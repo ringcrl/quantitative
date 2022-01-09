@@ -64,7 +64,7 @@ def get_timing_signal(stock_data, slope_series):
 
     rsrs_score = get_rsrs_score(stock_data, slope_series) # number
     volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
-    shooting_signal = get_shooting_signal(stock_data) # None | TOP | BOTTOM
+    shooting_signal = get_shooting_signal(stock_data) # '' | TOP|num | BOTTOM|num
     stock_score = get_stock_score(stock_data) # float
     gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
     
@@ -92,36 +92,27 @@ def get_volume_signal(stock_data):
 
 # 射击之星和锤头线信号
 def get_shooting_signal(stock_data):
-    # 返回格式：None | 'TOP' | 'BOTTOM'
-    num = 2
+    # 返回格式：None | 'TOP|num' | 'BOTTOM|num'
     len_rate = 2 # 一般2-3倍
-    top_num = 0
-    button_num = 0
-    latest_data = stock_data[-num:]
-    for i in range(num):
-        close_price = latest_data.close.values[i]
-        high_price = latest_data.high.values[i]
-        low_price = latest_data.low.values[i]
-        open_price = latest_data.open.values[i]
-        entity_len = abs(close_price - open_price)
-        upline_len = 0
-        downline_len = 0
-        # 收盘价高于开盘价
-        if close_price >= open_price:
-            upline_len = abs(high_price - close_price)
-            downline_len = abs(low_price - open_price)
-        else:
-            upline_len = abs(high_price - open_price)
-            downline_len = abs(low_price - close_price)
-        if upline_len >= entity_len * len_rate:
-            top_num += 1
-        if downline_len >= entity_len * len_rate:
-            button_num += 1
+    close_price = stock_data.close.values[-1]
+    high_price = stock_data.high.values[-1]
+    low_price = stock_data.low.values[-1]
+    open_price = stock_data.open.values[-1]
+    entity_len = abs(close_price - open_price)
+    upline_len = 0
+    downline_len = 0
+    # 收盘价高于开盘价
+    if close_price >= open_price:
+        upline_len = abs(high_price - close_price)
+        downline_len = abs(low_price - open_price)
+    else:
+        upline_len = abs(high_price - open_price)
+        downline_len = abs(low_price - close_price)
+    if upline_len >= entity_len * len_rate:
+        return f'''TOP|{high_price}'''
+    if downline_len >= entity_len * len_rate:
+        return f'''BOTTOM|{low_price}'''
     
-    if top_num == num:
-        return 'TOP'
-    elif button_num == num:
-        return 'BOTTOM'
     else:
         return None
 
@@ -381,6 +372,9 @@ def get_stock_signal(stock_code):
     return op_signal(stock_data)
 
 def op_signal(stock_data):
+    if len(stock_data.code.values) == 0:
+        return 'error'
+
     stock_code = stock_data.code.values[0]
     stock_data = get_adjust_data(stock_data)
 
@@ -390,13 +384,30 @@ def op_signal(stock_data):
 
     close_prices = f'''【{round(stock_data.close.values[-3], 2)}->{round(stock_data.close.values[-2], 2)}->{round(stock_data.close.values[-1], 2)}】'''
 
-    op = get_op(close_prices, a_s, b_s, c_s)
+    latest_price = round(stock_data.close.values[-1], 2)
+
+    op = get_op(latest_price, a_s, b_s, c_s)
+    point_info = get_point_info(latest_price, a_s, b_s, c_s)
 
     vol = f'''vol({round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)})'''
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
     rsrs = f'''rsrs({a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']})'''
+    shoot = f'''shoot({a_s['shooting_signal']}->{b_s['shooting_signal']}->{c_s['shooting_signal']})'''
+
+    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {shoot} {point_info}'''
+    return res
+
+def get_point_info(latest_price, a_s, b_s, c_s):
     gmma_info = c_s['gmma_signal'].split('|')
-    latest_price = round(stock_data.close.values[-1], 2)
+
+    a_shooting = a_s['shooting_signal']
+    b_shooting = b_s['shooting_signal']
+    c_shooting = c_s['shooting_signal']
+    a_shooting = float(a_shooting.split('|')[1]) if a_shooting != None else None
+    b_shooting = float(b_shooting.split('|')[1]) if b_shooting != None else None
+    c_shooting = float(c_shooting.split('|')[1]) if c_shooting != None else None
+    key_point = a_shooting or b_shooting or c_shooting
+    
     point_signal = ''
     if gmma_info[0] == 'GMMA_UP':
         point_signal = '支撑'
@@ -405,18 +416,18 @@ def op_signal(stock_data):
     else:
         point_signal = '缠绕'
     key_money = ((float(gmma_info[2]) - latest_price) / latest_price) * 100
-    stop_loss_monkey = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
+    stop_loss_monkey_per = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
+    
     if point_signal == '缠绕':
         if key_money > 0:
             point_signal += '顶部'
         else:
             point_signal += '底部'
-
-    point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%) 止损:{gmma_info[1]}({round(stop_loss_monkey, 2)}%)'''
-
-    # {close_prices} {gmma}
-    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
-    return res
+    point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%)'''
+    if key_point is not None:
+        key_point_per = ((key_point - latest_price) / latest_price) * 100
+        point_info += f''' 关键点:{key_point}({round(key_point_per, 2)}%)'''
+    return point_info
 
 def get_op(close_prices, a_s, b_s, c_s):
     BUY = 'BUY '
@@ -462,7 +473,7 @@ def get_op(close_prices, a_s, b_s, c_s):
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
     # 直接返回
-    # return stock_data
+    return stock_data
 
     # 收盘中，直接用成交量
     if curr_hour > close_time['h'] and curr_hour < open_time['h']:
