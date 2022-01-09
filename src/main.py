@@ -33,6 +33,7 @@ freq = 'K_DAY' # K_DAY | K_60M
 
 is_recall = config['is_recall'] == 'True'
 is_send_email = config['is_send_email'] == 'True'
+is_custom = config['is_custom'] == 'True'
 
 holding_stocks = config.get('holding_stocks')
 general_stocks = config.get('general_stocks')
@@ -267,7 +268,7 @@ def recall(stock_code):
         close_price = stock_data.close.values[-1]
         is_buy = signal_str.startswith('BUY')
         is_sell = signal_str.startswith('SELL')
-        curr_date = stock_data.time_key.values[-1][:10]
+        curr_date = stock_data.time_key.values[-1][2:10]
         info = f'''{curr_date} {signal_str}'''
 
         if i == 0:
@@ -327,12 +328,12 @@ def batch_recall(is_custom=True):
         filtered_info_list.append(stock_info)
     info = '\r\n'.join(filtered_info_list)
     win_len = len(re.findall('True', info))
-    win_rate = round(win_len / len(filtered_info_list) * 100, 2)
-    msg = f'''
-{current_dt} 近{RECALL_DAYS}天回测结果 胜率：{win_rate}%
-{info}'''
-    print(msg)
-    return msg
+    all_len = len(filtered_info_list)
+    win_rate = round(win_len / all_len * 100, 2)
+    msg_list = []
+    msg_list.append(f'''{current_dt} 近{RECALL_DAYS}天回测结果 胜率：{win_rate}%({win_len}/{all_len})''')
+    msg_list += filtered_info_list
+    return msg_list
 
 # 批量获取自选股信号
 def batch_op_signal(is_custom=True):
@@ -356,32 +357,24 @@ def batch_op_signal(is_custom=True):
             continue
         filtered_info_list.append(stock_info)
 
+    msg_list = []
     general_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is not None]
     custom_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is None]
-    buy_list_up = [item for item in custom_list if item.startswith('BUY') and '支撑' in item]
-    buy_list_down = [item for item in custom_list if item.startswith('BUY') and '阻力' in item]
-    buy_list_twine = [item for item in custom_list if item.startswith('BUY') and '缠绕' in item]
-    sell_list = [item for item in custom_list if item.startswith('SELL')]
-    not_list = [item for item in custom_list if (not item.startswith('SELL') and (not item.startswith('BUY')))]
-    
-    general_info = '大盘趋势：\r\n' + '\r\n'.join(general_list)
-    buy_info_up = '上升趋势：\r\n' + '\r\n'.join(buy_list_up)
-    buy_info_down = '下降趋势：\r\n' + '\r\n'.join(buy_list_down)
-    buy_info_twine = '缠绕趋势：\r\n' + '\r\n'.join(buy_list_twine)
-    sell_info = '卖出列表：\r\n' + '\r\n'.join(sell_list)
-    not_info = '其他列表：\r\n' + '\r\n'.join(not_list)
+    list_up = [item for item in custom_list if '支撑' in item]
+    list_down = [item for item in custom_list if '阻力' in item]
+    list_twine = [item for item in custom_list if '缠绕' in item]
 
-    msg = f'''
-{current_dt} 操作信号
-{general_info}
-{buy_info_up}
-{buy_info_down}
-{buy_info_twine}
-{sell_info}
-{not_info}
-'''
-    print(msg)
-    return msg
+    msg_list.append(f'''{current_dt} 操作信号''')
+    msg_list.append('大盘趋势：')
+    msg_list += general_list
+    msg_list.append('上升趋势：')
+    msg_list += list_up
+    msg_list.append('下降趋势：')
+    msg_list += list_down
+    msg_list.append('缠绕趋势：')
+    msg_list += list_twine
+
+    return msg_list
 
 def get_stock_signal(stock_code):
     stock_data = get_code_data(stock_code)
@@ -399,9 +392,9 @@ def op_signal(stock_data):
 
     op = get_op(close_prices, a_s, b_s, c_s)
 
-    vol = f'''【{round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}】'''
+    vol = f'''vol({round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)})'''
     gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
-    rsrs = f'''【{a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']}】'''
+    rsrs = f'''rsrs({a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']})'''
     gmma_info = c_s['gmma_signal'].split('|')
     latest_price = round(stock_data.close.values[-1], 2)
     point_signal = ''
@@ -422,53 +415,55 @@ def op_signal(stock_data):
     point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%) 止损:{gmma_info[1]}({round(stop_loss_monkey, 2)}%)'''
 
     # {close_prices} {gmma}
-    res = f'''{op}{stock_code} {latest_price} {point_info} rsrs:{rsrs} vol:{vol}'''
+    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
     return res
 
 def get_op(close_prices, a_s, b_s, c_s):
-    BUY = 'BUY】'
-    SELL = 'SELL】'
+    BUY = 'BUY '
+    SELL = 'SELL '
     NONE_INFO = ''
+
     # 止损
     # [gmma, stop_loss, key_point] = c_s['gmma_signal'].split('|')
     # if close_prices < stop_loss:
     #     return 'SELL'
-    
-    # 支撑位买入
-    # if gmma == 'GMMA_UP':
-    #     if close_prices <= key_point:
-    #         return 'BUY'
-    
-    # # 阻力位卖出
-    # if gmma == 'GMMA_DOWN':
-    #     if close_prices >= key_point:
-    #         return 'SELL'
 
-    rsrs_score = c_s['rsrs_score']
-    volume_signal = c_s['volume_signal']
+    a_rsrs = a_s['rsrs_score']
+    b_rsrs = b_s['rsrs_score']
+    c_rsrs = c_s['rsrs_score']
+
+    a_vol = a_s['volume_signal']
+    b_vol = b_s['volume_signal']
+    c_vol = c_s['volume_signal']
+
     gmma_signal = c_s['gmma_signal']
 
-    if rsrs_score >= RSRS_THRESHOLD and volume_signal >= 1:
-        return BUY
-    elif rsrs_score >= RSRS_THRESHOLD and volume_signal < 1:
-        if not gmma_signal.startswith('GMMA_UP'):
-            return SELL
-        if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
+    # v1
+    if c_rsrs >= RSRS_THRESHOLD:
+        if c_vol >= 1:
             return BUY
-
-    elif rsrs_score <= -RSRS_THRESHOLD and volume_signal < 1:
-        if a_s['volume_signal'] < b_s['volume_signal'] < c_s['volume_signal']:
+        elif c_vol < 1:
+            if not gmma_signal.startswith('GMMA_UP'):
+                return SELL
+            if a_vol < b_vol <c_vol:
+                return BUY
+    if c_rsrs <= -RSRS_THRESHOLD:
+        if c_vol >= 1:
             return BUY
-        else:
-            return SELL
-    elif rsrs_score <= -RSRS_THRESHOLD and volume_signal >= 1:
-        return BUY
+        elif c_vol < 1:
+            if a_vol < b_vol < c_vol:
+                return BUY
+            else:
+                return SELL
 
     # 无信号
     return NONE_INFO
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
+    # 直接返回
+    # return stock_data
+
     # 收盘中，直接用成交量
     if curr_hour > close_time['h'] and curr_hour < open_time['h']:
         return stock_data
@@ -490,13 +485,24 @@ def get_adjust_data(stock_data):
 
 
 if __name__ == "__main__":
-    # True 自定义列表、False 全市场列表
+    # print(f'\033[32m这是绿色字体\033[0m')
+    # print(f'\033[31m这是红色字体\033[0m')
 
-    msg = ''
+    msg_list = []
     if is_recall:
-        msg = batch_recall(True)        
+        msg_list = batch_recall(is_custom)        
     else:
-        msg = batch_op_signal(True)
+        msg_list = batch_op_signal(is_custom)
+
+    info = ''
+    for msg in msg_list:
+        if re.search(r'BUY|True', msg):
+            info += f'\033[31m{msg}\033[0m\r\n'
+        elif re.search(r'SELL', msg):
+            info += f'\033[32m{msg}\033[0m\r\n'
+        else:
+            info += f'{msg}\r\n'
+    print(info)
 
     if is_send_email:
-        send_mail(msg)
+        send_mail(msg_list)

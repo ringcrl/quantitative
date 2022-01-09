@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 import time
 from dotenv import dotenv_values
+import re
 
 config = dotenv_values(".env") 
 
@@ -13,12 +14,31 @@ sender = config['sender'] # 发件人邮箱账号
 sender_pass = config['sender_pass'] # 发件人邮箱密码
 receivers = config['receiver'].split('|') # 收件人邮箱账号
 
-def send_mail(message):
+def send_mail(msg_list):
     ret = True
     try:
         current_dt = time.strftime("%Y-%m-%d", time.localtime())
         title = current_dt.split(" ")[0] + "操作"
-        msg = MIMEText(message,'plain','utf-8')
+
+        p_info = ''
+        for msg in msg_list:
+            if re.search(r'BUY|True', msg):
+                p_info += f'''<p style="color: green;">{msg}</p>\r\n'''
+            elif re.search(r'SELL', msg):
+                p_info += f'''<p style="color: red;">{msg}</p>\r\n'''
+            else:
+                p_info += f'''<p style="color: black;">{msg}</p>\r\n'''
+
+        html = f'''
+<html>
+<head></head>
+<body>
+    {p_info}
+</body>
+</html>
+'''
+
+        msg = MIMEText(html, 'html', 'utf-8')
         msg['From'] = formataddr(["chenng", sender])         # 发件人昵称
         msg['To'] = ','.join(receivers)             # 接收人昵称
         msg['Subject'] = title                              # 邮件的主题
