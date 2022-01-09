@@ -23,9 +23,9 @@ def send_mail(msg_list):
         p_info = ''
         for msg in msg_list:
             if re.search(r'BUY|True', msg):
-                p_info += f'''<p style="color: green;">{msg}</p>\r\n'''
-            elif re.search(r'SELL', msg):
                 p_info += f'''<p style="color: red;">{msg}</p>\r\n'''
+            elif re.search(r'SELL', msg):
+                p_info += f'''<p style="color: green;">{msg}</p>\r\n'''
             else:
                 p_info += f'''<p style="color: black;">{msg}</p>\r\n'''
 
