@@ -109,12 +109,12 @@ def get_shooting_signal(stock_data):
         upline_len = abs(high_price - open_price)
         downline_len = abs(low_price - close_price)
     if upline_len >= entity_len * len_rate:
-        return f'''TOP|{high_price}'''
+        return f'''TOP|{round(high_price, 2)}'''
     if downline_len >= entity_len * len_rate:
-        return f'''BOTTOM|{low_price}'''
+        return f'''BOTTOM|{round(low_price, 2)}'''
     
     else:
-        return None
+        return 'None'
 
 def get_gmma_signal(close: np.array):
     ema10 = get_ema(close, 10)[-1]
@@ -394,19 +394,11 @@ def op_signal(stock_data):
     rsrs = f'''rsrs({a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']})'''
     shoot = f'''shoot({a_s['shooting_signal']}->{b_s['shooting_signal']}->{c_s['shooting_signal']})'''
 
-    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {shoot} {point_info}'''
+    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
     return res
 
 def get_point_info(latest_price, a_s, b_s, c_s):
     gmma_info = c_s['gmma_signal'].split('|')
-
-    a_shooting = a_s['shooting_signal']
-    b_shooting = b_s['shooting_signal']
-    c_shooting = c_s['shooting_signal']
-    a_shooting = float(a_shooting.split('|')[1]) if a_shooting != None else None
-    b_shooting = float(b_shooting.split('|')[1]) if b_shooting != None else None
-    c_shooting = float(c_shooting.split('|')[1]) if c_shooting != None else None
-    key_point = a_shooting or b_shooting or c_shooting
     
     point_signal = ''
     if gmma_info[0] == 'GMMA_UP':
@@ -424,10 +416,25 @@ def get_point_info(latest_price, a_s, b_s, c_s):
         else:
             point_signal += '底部'
     point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%)'''
-    if key_point is not None:
-        key_point_per = ((key_point - latest_price) / latest_price) * 100
-        point_info += f''' 关键点:{key_point}({round(key_point_per, 2)}%)'''
+
+    a_shooting = a_s['shooting_signal']
+    b_shooting = b_s['shooting_signal']
+    c_shooting = c_s['shooting_signal']
+    if a_shooting != 'None':
+        point_info += f''' {get_shooting_info(a_shooting)}'''
+    if b_shooting != 'None':
+        point_info += f''' {get_shooting_info(b_shooting)}'''
+    if c_shooting !='None':
+        point_info += f''' {get_shooting_info(c_shooting)}'''
+    
     return point_info
+
+def get_shooting_info(shooting_signal):
+    [signal, price] = shooting_signal.split('|')
+    if signal == 'TOP':
+        return f'''不突破{price}卖出'''
+    if signal == 'BOTTOM':
+        return f'''跌破{price}卖出'''
 
 def get_op(close_prices, a_s, b_s, c_s):
     BUY = 'BUY '
