@@ -57,6 +57,9 @@ MEAN_DAY = 50 # 计算结束值，参考最近 MEAN_DAY
 MEAN_DIFF_DAY = 5 # 计算初始值，参考(MEAN_DAY + MEAN_DIFF_DAY)天前，窗口为 MEAN_DIFF_DAY 的一段时间
 RECALL_DAYS = 250 # 回测天数
 STOP_LOSS = 0.98 # 止损点位
+SUPPORT = '买点'
+RESISTANCE = '卖点'
+TWINE = '缠绕'
 
 # 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, slope_series):
@@ -125,13 +128,10 @@ def get_gmma_signal(close: np.array):
     ema60 = get_ema(close, 60)[-1]
 
     if ema10 > ema20 > ema30 > ema40 > ema50 > ema60:
-        # 多头|止损|支撑
         return f'''GMMA_UP|{round(ema60 * STOP_LOSS, 2)}|{round(ema50, 2)}'''
     elif ema10 < ema20 < ema30 < ema40 < ema50 < ema60:
-        # 空头|止损|支撑
         return f'''GMMA_DOWN|{round(ema10 * STOP_LOSS, 2)}|{round(ema30, 2)}'''
     else:
-        # 缠绕|止损|支撑
         return f'''GMMA_TWINE|{round(ema10 * STOP_LOSS, 2)}|{round(ema10, 2)}'''
 
 # 获取 EMA
@@ -351,9 +351,9 @@ def batch_op_signal(is_custom=True):
     msg_list = []
     general_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is not None]
     custom_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is None]
-    list_up = [item for item in custom_list if '支撑' in item]
-    list_down = [item for item in custom_list if '阻力' in item]
-    list_twine = [item for item in custom_list if '缠绕' in item]
+    list_up = [item for item in custom_list if SUPPORT in item]
+    list_down = [item for item in custom_list if RESISTANCE in item]
+    list_twine = [item for item in custom_list if TWINE in item]
 
     msg_list.append(f'''{current_dt} 操作信号''')
     msg_list.append('大盘趋势：')
@@ -402,19 +402,19 @@ def get_point_info(latest_price, a_s, b_s, c_s):
     
     point_signal = ''
     if gmma_info[0] == 'GMMA_UP':
-        point_signal = '支撑'
+        point_signal = SUPPORT
     elif gmma_info[0] == 'GMMA_DOWN':
-        point_signal = '阻力'
+        point_signal = RESISTANCE
     else:
-        point_signal = '缠绕'
+        point_signal = TWINE
     key_money = ((float(gmma_info[2]) - latest_price) / latest_price) * 100
     stop_loss_monkey_per = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
     
-    if point_signal == '缠绕':
+    if point_signal == TWINE:
         if key_money > 0:
-            point_signal += '顶部'
+            point_signal += '卖点'
         else:
-            point_signal += '底部'
+            point_signal += '买点'
     point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%)'''
 
     a_shooting = a_s['shooting_signal']
