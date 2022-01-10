@@ -412,9 +412,9 @@ def get_point_info(latest_price, a_s, b_s, c_s):
     
     if point_signal == TWINE:
         if key_money > 0:
-            point_signal += '卖点'
+            point_signal += '压力'
         else:
-            point_signal += '买点'
+            point_signal += '支撑'
     point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%)'''
 
     a_shooting = a_s['shooting_signal']
@@ -432,7 +432,7 @@ def get_point_info(latest_price, a_s, b_s, c_s):
 def get_shooting_info(shooting_signal):
     [signal, price] = shooting_signal.split('|')
     if signal == 'TOP':
-        return f'''不突破{price}卖出'''
+        return f'''量升不突破{price}卖出'''
     if signal == 'BOTTOM':
         return f'''跌破{price}卖出'''
 
