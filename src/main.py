@@ -34,6 +34,7 @@ freq = 'K_DAY' # K_DAY | K_60M
 is_recall = config['is_recall'] == 'True'
 is_send_email = config['is_send_email'] == 'True'
 is_custom = config['is_custom'] == 'True'
+is_opening = config['is_opening'] == 'True'
 
 holding_stocks = config.get('holding_stocks')
 general_stocks = config.get('general_stocks')
@@ -376,7 +377,8 @@ def op_signal(stock_data):
         return 'error'
 
     stock_code = stock_data.code.values[0]
-    stock_data = get_adjust_data(stock_data)
+    if is_opening:
+        stock_data = get_adjust_data(stock_data)
 
     a_s = get_stock_signals(stock_data[:-2])
     b_s = get_stock_signals(stock_data[:-1])
@@ -479,9 +481,6 @@ def get_op(close_prices, a_s, b_s, c_s):
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
-    # 直接返回
-    return stock_data
-
     # 收盘中，直接用成交量
     if curr_hour > close_time['h'] and curr_hour < open_time['h']:
         return stock_data
