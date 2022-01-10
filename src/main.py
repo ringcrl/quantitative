@@ -422,21 +422,21 @@ def get_point_info(latest_price, a_s, b_s, c_s):
     a_shooting = a_s['shooting_signal']
     b_shooting = b_s['shooting_signal']
     c_shooting = c_s['shooting_signal']
-    if a_shooting != 'None':
-        point_info += f''' {get_shooting_info(a_shooting)}'''
-    if b_shooting != 'None':
-        point_info += f''' {get_shooting_info(b_shooting)}'''
-    if c_shooting !='None':
-        point_info += f''' {get_shooting_info(c_shooting)}'''
+    point_info += get_shooting_info(a_shooting, point_signal, -3)
+    point_info += get_shooting_info(b_shooting, point_signal, -2)
+    point_info += get_shooting_info(c_shooting, point_signal, -1)
     
     return point_info
 
-def get_shooting_info(shooting_signal):
+def get_shooting_info(shooting_signal, point_signal, index):
+    if shooting_signal == 'None':
+        return ''
     [signal, price] = shooting_signal.split('|')
-    if signal == 'TOP':
-        return f'''量升不突破{price}卖出'''
-    if signal == 'BOTTOM':
-        return f'''跌破{price}卖出'''
+    if signal == 'TOP' and point_signal == SUPPORT:
+        return f''' {index}量升不突破{price}卖出'''
+    if signal == 'BOTTOM' and point_signal == RESISTANCE:
+        return f''' {index}跌破{price}卖出'''
+    return ''
 
 def get_op(close_prices, a_s, b_s, c_s):
     BUY = 'BUY '
