@@ -129,11 +129,12 @@ def get_gmma_signal(close: np.array):
     ema60 = get_ema(close, 60)[-1]
 
     if ema10 > ema20 > ema30 > ema40 > ema50 > ema60:
-        return f'''GMMA_UP|{round(ema60 * STOP_LOSS, 2)}|{round(ema50, 2)}'''
+        return f'''GMMA_UP|{round(ema50, 2)}'''
     elif ema10 < ema20 < ema30 < ema40 < ema50 < ema60:
-        return f'''GMMA_DOWN|{round(ema10 * STOP_LOSS, 2)}|{round(ema30, 2)}'''
+        return f'''GMMA_DOWN|{round(ema30, 2)}'''
     else:
-        return f'''GMMA_TWINE|{round(ema10 * STOP_LOSS, 2)}|{round(ema10, 2)}'''
+        return f'''GMMA_TWINE|{round(ema50, 2)}'''
+        
 
 # 获取 EMA
 def get_ema(close: np.array, timeperiod=5):
@@ -380,21 +381,28 @@ def op_signal(stock_data):
     if is_opening:
         stock_data = get_adjust_data(stock_data)
 
-    a_s = get_stock_signals(stock_data[:-2])
-    b_s = get_stock_signals(stock_data[:-1])
-    c_s = get_stock_signals(stock_data)
+    a_s = get_stock_signals(stock_data[:-3])
+    b_s = get_stock_signals(stock_data[:-2])
+    c_s = get_stock_signals(stock_data[:-1])
+    d_s = get_stock_signals(stock_data)
 
     close_prices = f'''【{round(stock_data.close.values[-3], 2)}->{round(stock_data.close.values[-2], 2)}->{round(stock_data.close.values[-1], 2)}】'''
 
     latest_price = round(stock_data.close.values[-1], 2)
 
-    op = get_op(latest_price, a_s, b_s, c_s)
-    point_info = get_point_info(latest_price, a_s, b_s, c_s)
+    op_pre = get_op(None, a_s, b_s, c_s)
+    op_now = get_op(None, b_s, c_s, d_s)
 
-    vol = f'''vol({round(a_s['volume_signal'], 2)}->{round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)})'''
-    gmma = f'''【{a_s['gmma_signal']}->{b_s['gmma_signal']}->{c_s['gmma_signal']}】'''
-    rsrs = f'''rsrs({a_s['rsrs_score']}->{b_s['rsrs_score']}->{c_s['rsrs_score']})'''
-    shoot = f'''shoot({a_s['shooting_signal']}->{b_s['shooting_signal']}->{c_s['shooting_signal']})'''
+    op = ''
+    if op_pre != op_now:
+        op = op_now
+
+    point_info = get_point_info(latest_price, b_s, c_s, d_s)
+
+    vol = f'''vol({round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}->{round(d_s['volume_signal'], 2)})'''
+    gmma = f'''【{b_s['gmma_signal']}->{c_s['gmma_signal']}->{d_s['gmma_signal']}】'''
+    rsrs = f'''rsrs({b_s['rsrs_score']}->{c_s['rsrs_score']}->{d_s['rsrs_score']})'''
+    shoot = f'''shoot({b_s['shooting_signal']}->{c_s['shooting_signal']}->{d_s['shooting_signal']})'''
 
     res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
     return res
@@ -409,15 +417,15 @@ def get_point_info(latest_price, a_s, b_s, c_s):
         point_signal = RESISTANCE
     else:
         point_signal = TWINE
-    key_money = ((float(gmma_info[2]) - latest_price) / latest_price) * 100
-    stop_loss_monkey_per = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
+    key_money = ((float(gmma_info[1]) - latest_price) / latest_price) * 100
     
     if point_signal == TWINE:
         if key_money > 0:
             point_signal += '压力'
         else:
             point_signal += '支撑'
-    point_info = f'''{point_signal}:{gmma_info[2]}({round(key_money, 2)}%)'''
+
+    point_info = f'''{point_signal}:{gmma_info[1]}({round(key_money, 2)}%)'''
 
     a_shooting = a_s['shooting_signal']
     b_shooting = b_s['shooting_signal']
