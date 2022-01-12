@@ -58,9 +58,12 @@ MEAN_DAY = 50 # 计算结束值，参考最近 MEAN_DAY
 MEAN_DIFF_DAY = 5 # 计算初始值，参考(MEAN_DAY + MEAN_DIFF_DAY)天前，窗口为 MEAN_DIFF_DAY 的一段时间
 RECALL_DAYS = 250 # 回测天数
 STOP_LOSS = 0.98 # 止损点位
-SUPPORT = '买点'
-RESISTANCE = '卖点'
+SUPPORT = '支撑'
+RESISTANCE = '压力'
 TWINE = '缠绕'
+BUY = 'BUY '
+SELL = 'SELL '
+NONE_INFO = ''
 
 # 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_timing_signal(stock_data, slope_series):
@@ -353,18 +356,19 @@ def batch_op_signal(is_custom=True):
     msg_list = []
     general_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is not None]
     custom_list = [item for item in filtered_info_list if re.search(GENERAL_MATCH, item) is None]
-    list_up = [item for item in custom_list if SUPPORT in item]
-    list_down = [item for item in custom_list if RESISTANCE in item]
+    list_up = [item for item in custom_list if SUPPORT in item and not TWINE in item]
+    list_down = [item for item in custom_list if RESISTANCE in item and not TWINE in item]
     list_twine = [item for item in custom_list if TWINE in item]
 
     msg_list.append(f'''{current_dt} 操作信号''')
-    msg_list.append('大盘趋势：')
+    msg_list.append(f'''Notes: 带有 _ 为历史信号''')
+    msg_list.append('\r\n大盘趋势：')
     msg_list += general_list
-    msg_list.append('上升趋势：')
+    msg_list.append('\r\n上升趋势：')
     msg_list += list_up
-    msg_list.append('下降趋势：')
+    msg_list.append('\r\n下降趋势：')
     msg_list += list_down
-    msg_list.append('缠绕趋势：')
+    msg_list.append('\r\n缠绕趋势：')
     msg_list += list_twine
 
     return msg_list
@@ -374,6 +378,8 @@ def get_stock_signal(stock_code):
     return op_signal(stock_data)
 
 def op_signal(stock_data):
+    if stock_data is None:
+        return 'error'
     if len(stock_data.code.values) == 0:
         return 'error'
 
@@ -396,6 +402,8 @@ def op_signal(stock_data):
     op = ''
     if op_pre != op_now:
         op = op_now
+    elif op_now != NONE_INFO:
+        op = f'''_{op_now}'''
 
     point_info = get_point_info(latest_price, b_s, c_s, d_s)
 
@@ -447,10 +455,6 @@ def get_shooting_info(shooting_signal, point_signal, index):
     return ''
 
 def get_op(close_prices, a_s, b_s, c_s):
-    BUY = 'BUY '
-    SELL = 'SELL '
-    NONE_INFO = ''
-
     # 止损
     # [gmma, stop_loss, key_point] = c_s['gmma_signal'].split('|')
     # if close_prices < stop_loss:
@@ -521,9 +525,9 @@ if __name__ == "__main__":
 
     info = ''
     for msg in msg_list:
-        if re.search(r'BUY|True', msg):
+        if msg.startswith(BUY):
             info += f'\033[31m{msg}\033[0m\r\n'
-        elif re.search(r'SELL', msg):
+        elif msg.startswith(SELL):
             info += f'\033[32m{msg}\033[0m\r\n'
         else:
             info += f'{msg}\r\n'
