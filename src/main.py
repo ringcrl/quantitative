@@ -449,9 +449,9 @@ def get_shooting_info(shooting_signal, point_signal, index):
         return ''
     [signal, price] = shooting_signal.split('|')
     if signal == 'TOP' and point_signal == SUPPORT:
-        return f''' {index}量升不突破{price}卖出'''
+        return f''' {index}突破位:{price}'''
     if signal == 'BOTTOM' and point_signal == RESISTANCE:
-        return f''' {index}跌破{price}卖出'''
+        return f''' {index}跌破位{price}'''
     return ''
 
 def get_op(close_prices, a_s, b_s, c_s):
