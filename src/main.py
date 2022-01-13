@@ -36,18 +36,16 @@ is_send_email = config['is_send_email'] == 'True'
 is_custom = config['is_custom'] == 'True'
 is_opening = config['is_opening'] == 'True'
 
-holding_stocks = config.get('holding_stocks')
 general_stocks = config.get('general_stocks')
 watching_stocks = config.get('watching_stocks')
 test_stocks = config.get('test_stocks')
 
-holding_stocks = holding_stocks.split('|') if holding_stocks else []
 general_stocks = general_stocks.split('|') if general_stocks else []
 watching_stocks = watching_stocks.split('|') if watching_stocks else []
 test_stocks = test_stocks.split('|') if test_stocks else []
 
 # 自选股
-custom_stocks = holding_stocks + general_stocks + watching_stocks + test_stocks
+custom_stocks = general_stocks + watching_stocks + test_stocks
 win_num = 0 # 统计获胜比例
 
 # 动量轮动参数
