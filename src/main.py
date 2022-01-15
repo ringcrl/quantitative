@@ -27,8 +27,6 @@ close_time = {
     'm': 0,
 }
 
-GENERAL_MATCH = r'QQQ|DIA|SPY|UVXY'
-
 freq = 'K_DAY' # K_DAY | K_60M
 
 is_recall = config['is_recall'] == 'True'
@@ -39,6 +37,8 @@ is_opening = config['is_opening'] == 'True'
 general_stocks = config.get('general_stocks')
 watching_stocks = config.get('watching_stocks')
 test_stocks = config.get('test_stocks')
+
+GENERAL_MATCH = re.compile(general_stocks)
 
 general_stocks = general_stocks.split('|') if general_stocks else []
 watching_stocks = watching_stocks.split('|') if watching_stocks else []
