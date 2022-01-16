@@ -18,11 +18,11 @@ def send_mail(msg_list):
     ret = True
     try:
         current_dt = time.strftime("%Y-%m-%d", time.localtime())
-        title = current_dt.split(" ")[0] + "操作"
+        title = current_dt.split(" ")[0] + "信号"
 
         p_info = ''
         for msg in msg_list:
-            if msg.startswith('BUY'):
+            if msg.startswith('BUY') or re.search('True', msg):
                 p_info += f'''<p style="color: red;">{msg}</p>\r\n'''
             elif msg.startswith('SELL'):
                 p_info += f'''<p style="color: green;">{msg}</p>\r\n'''

@@ -38,7 +38,7 @@ general_stocks = config.get('general_stocks')
 watching_stocks = config.get('watching_stocks')
 test_stocks = config.get('test_stocks')
 
-GENERAL_MATCH = re.compile(general_stocks)
+GENERAL_MATCH = re.compile(general_stocks or '')
 
 general_stocks = general_stocks.split('|') if general_stocks else []
 watching_stocks = watching_stocks.split('|') if watching_stocks else []
@@ -52,10 +52,9 @@ win_num = 0 # 统计获胜比例
 N = 18 # 计算最新斜率 slope，拟合度 r2 参考最近 N 天，18
 M = 200 # 计算最新标准分 zscore，rsrs_score 参考最近 M 天，600
 RSRS_THRESHOLD = 0.4 # rsrs 标准分指标阈值
-MEAN_DAY = 50 # 计算结束值，参考最近 MEAN_DAY
-MEAN_DIFF_DAY = 5 # 计算初始值，参考(MEAN_DAY + MEAN_DIFF_DAY)天前，窗口为 MEAN_DIFF_DAY 的一段时间
+MEAN_DAY = 50 # 远期平均线天数
+MEAN_DIFF_DAY = 5 # 近期平均天数
 RECALL_DAYS = 250 # 回测天数
-STOP_LOSS = 0.98 # 止损点位
 SUPPORT = '支撑'
 RESISTANCE = '压力'
 TWINE = '缠绕'
@@ -63,23 +62,41 @@ BUY = 'BUY '
 SELL = 'SELL '
 NONE_INFO = ''
 
-# 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
-def get_timing_signal(stock_data, slope_series):
-    # 返回格式：stock_signal, rsrs_score, val_status
+def get_op(close_prices, a_s, b_s, c_s):
+    a_rsrs = a_s['rsrs_score']
+    b_rsrs = b_s['rsrs_score']
+    c_rsrs = c_s['rsrs_score']
 
-    rsrs_score = get_rsrs_score(stock_data, slope_series) # number
-    volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
-    shooting_signal = get_shooting_signal(stock_data) # '' | TOP|num | BOTTOM|num
-    stock_score = get_stock_score(stock_data) # float
-    gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
-    
-    return {
-        "rsrs_score": round(rsrs_score, 2),
-        "volume_signal": volume_signal,
-        "shooting_signal": shooting_signal,
-        "stock_score": stock_score,
-        "gmma_signal": gmma_signal,
-    }
+    a_vol = a_s['volume_signal']
+    b_vol = b_s['volume_signal']
+    c_vol = c_s['volume_signal']
+    vol_list = [a_vol, b_vol, c_vol]
+    mean_vol = sum(vol_list) / len(vol_list)
+
+    gmma_signal = c_s['gmma_signal']
+
+    shooting_signal = c_s['shooting_signal']
+
+    # v1
+    if c_rsrs >= RSRS_THRESHOLD:
+        if c_vol >= 1:
+            return BUY
+        elif c_vol < 1:
+            if not gmma_signal.startswith('GMMA_UP'):
+                return SELL
+            if a_vol < b_vol <c_vol:
+                return BUY
+    if c_rsrs <= -RSRS_THRESHOLD:
+        if c_vol >= 1:
+            return BUY
+        elif c_vol < 1:
+            if a_vol < b_vol < c_vol:
+                return BUY
+            else:
+                return SELL
+
+    # 无信号
+    return NONE_INFO
 
 # 计算 rsrs 信号：https://zhuanlan.zhihu.com/p/33501881
 def get_rsrs_score(stock_data, slope_series):
@@ -95,14 +112,17 @@ def get_volume_signal(stock_data):
     mean_diff_day_value = stock_data.turnover[-MEAN_DIFF_DAY:].mean()
     return mean_diff_day_value / mean_day_value
 
-# 射击之星和锤头线信号
+# 射击之星和锤头线信号，合并多天数据
 def get_shooting_signal(stock_data):
     # 返回格式：None | 'TOP|num' | 'BOTTOM|num'
-    len_rate = 2 # 一般2-3倍
+
+    LEN_RATE = 1.5 # 一般2-3倍
+    LEN_DAY = 3 # 合并K线的天数
+    open_price = stock_data.open.values[-LEN_DAY]
     close_price = stock_data.close.values[-1]
-    high_price = stock_data.high.values[-1]
-    low_price = stock_data.low.values[-1]
-    open_price = stock_data.open.values[-1]
+    high_price = max(stock_data.high.values[-LEN_DAY:])
+    low_price = min(stock_data.low.values[-LEN_DAY:])
+
     entity_len = abs(close_price - open_price)
     upline_len = 0
     downline_len = 0
@@ -113,9 +133,9 @@ def get_shooting_signal(stock_data):
     else:
         upline_len = abs(high_price - open_price)
         downline_len = abs(low_price - close_price)
-    if upline_len >= entity_len * len_rate:
+    if upline_len >= entity_len * LEN_RATE:
         return f'''TOP|{round(high_price, 2)}'''
-    if downline_len >= entity_len * len_rate:
+    if downline_len >= entity_len * LEN_RATE:
         return f'''BOTTOM|{round(low_price, 2)}'''
     
     else:
@@ -233,10 +253,22 @@ def get_zscore(slope_series):
 def initial_slope_series(general_stock, N, M):
     return [get_ols(general_stock.low[i:i+N], general_stock.high[i:i+N])[1] for i in range(M)]
 
-# 获取股票信号
+# 择时模块-计算综合信号，rsrs 信号算法参考优化说明，与其他值共同判断减少误差
 def get_stock_signals(stock_data):
     slope_series = initial_slope_series(stock_data, N, M)[:-1]
-    return get_timing_signal(stock_data, slope_series)
+    rsrs_score = get_rsrs_score(stock_data, slope_series) # number
+    volume_signal = get_volume_signal(stock_data) # VAL_UP | VAL_DOWN | VAL_STILL
+    shooting_signal = get_shooting_signal(stock_data) # '' | TOP|num | BOTTOM|num
+    stock_score = get_stock_score(stock_data) # float
+    gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
+    
+    return {
+        "rsrs_score": round(rsrs_score, 2),
+        "volume_signal": volume_signal,
+        "shooting_signal": shooting_signal,
+        "stock_score": stock_score,
+        "gmma_signal": gmma_signal,
+    }
 
 # 运行回测
 def recall(stock_code):
@@ -408,7 +440,6 @@ def op_signal(stock_data):
     vol = f'''vol({round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}->{round(d_s['volume_signal'], 2)})'''
     gmma = f'''【{b_s['gmma_signal']}->{c_s['gmma_signal']}->{d_s['gmma_signal']}】'''
     rsrs = f'''rsrs({b_s['rsrs_score']}->{c_s['rsrs_score']}->{d_s['rsrs_score']})'''
-    shoot = f'''shoot({b_s['shooting_signal']}->{c_s['shooting_signal']}->{d_s['shooting_signal']})'''
 
     res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
     return res
@@ -433,61 +464,20 @@ def get_point_info(latest_price, a_s, b_s, c_s):
 
     point_info = f'''{point_signal}:{gmma_info[1]}({round(key_money, 2)}%)'''
 
-    a_shooting = a_s['shooting_signal']
-    b_shooting = b_s['shooting_signal']
     c_shooting = c_s['shooting_signal']
-    point_info += get_shooting_info(a_shooting, point_signal, -3)
-    point_info += get_shooting_info(b_shooting, point_signal, -2)
-    point_info += get_shooting_info(c_shooting, point_signal, -1)
+    point_info += get_shooting_info(c_shooting, point_signal)
     
     return point_info
 
-def get_shooting_info(shooting_signal, point_signal, index):
+def get_shooting_info(shooting_signal, point_signal):
     if shooting_signal == 'None':
         return ''
     [signal, price] = shooting_signal.split('|')
     if signal == 'TOP' and point_signal == SUPPORT:
-        return f''' {index}突破位:{price}'''
+        return f''' 突破位:{price}'''
     if signal == 'BOTTOM' and point_signal == RESISTANCE:
-        return f''' {index}跌破位{price}'''
+        return f''' 跌破位{price}'''
     return ''
-
-def get_op(close_prices, a_s, b_s, c_s):
-    # 止损
-    # [gmma, stop_loss, key_point] = c_s['gmma_signal'].split('|')
-    # if close_prices < stop_loss:
-    #     return 'SELL'
-
-    a_rsrs = a_s['rsrs_score']
-    b_rsrs = b_s['rsrs_score']
-    c_rsrs = c_s['rsrs_score']
-
-    a_vol = a_s['volume_signal']
-    b_vol = b_s['volume_signal']
-    c_vol = c_s['volume_signal']
-
-    gmma_signal = c_s['gmma_signal']
-
-    # v1
-    if c_rsrs >= RSRS_THRESHOLD:
-        if c_vol >= 1:
-            return BUY
-        elif c_vol < 1:
-            if not gmma_signal.startswith('GMMA_UP'):
-                return SELL
-            if a_vol < b_vol <c_vol:
-                return BUY
-    if c_rsrs <= -RSRS_THRESHOLD:
-        if c_vol >= 1:
-            return BUY
-        elif c_vol < 1:
-            if a_vol < b_vol < c_vol:
-                return BUY
-            else:
-                return SELL
-
-    # 无信号
-    return NONE_INFO
 
 # 开盘中成交量通过时间比例计算
 def get_adjust_data(stock_data):
@@ -523,7 +513,7 @@ if __name__ == "__main__":
 
     info = ''
     for msg in msg_list:
-        if msg.startswith(BUY):
+        if msg.startswith(BUY) or re.search('True', msg):
             info += f'\033[31m{msg}\033[0m\r\n'
         elif msg.startswith(SELL):
             info += f'\033[32m{msg}\033[0m\r\n'
