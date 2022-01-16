@@ -35,14 +35,19 @@ is_custom = config['is_custom'] == 'True'
 is_opening = config['is_opening'] == 'True'
 
 general_stocks = config.get('general_stocks')
-watching_stocks = config.get('watching_stocks')
-test_stocks = config.get('test_stocks')
-
 GENERAL_MATCH = re.compile(general_stocks or '')
-
 general_stocks = general_stocks.split('|') if general_stocks else []
+
+watching_stocks = config.get('watching_stocks')
 watching_stocks = watching_stocks.split('|') if watching_stocks else []
-test_stocks = test_stocks.split('|') if test_stocks else []
+
+test_stock = config.get('test_stock')
+test_stocks = [test_stock] if test_stock else []
+
+test_stock_bottoms = config.get('test_stock_bottoms')
+test_stock_bottoms = test_stock_bottoms.split('|') if test_stock_bottoms else []
+test_stock_tops = config.get('test_stock_tops')
+test_stock_tops = test_stock_tops.split('|') if test_stock_tops else []
 
 # 自选股
 custom_stocks = general_stocks + watching_stocks + test_stocks
@@ -295,7 +300,14 @@ def recall(stock_code):
         is_buy = signal_str.startswith('BUY')
         is_sell = signal_str.startswith('SELL')
         curr_date = stock_data.time_key.values[-1][2:10]
+
+
         info = f'''{curr_date} {signal_str}'''
+
+        if curr_date in test_stock_bottoms:
+            info += ' BOTTOM'
+        elif curr_date in test_stock_tops:
+            info += ' TOP'
 
         if i == 0:
             keep_stocks = monkey_count / close_price
@@ -305,7 +317,7 @@ def recall(stock_code):
             monkey_count = 0
             before_total = stock_count * close_price
             trade_num += 1
-            print(info + ' 买入')
+            print(info + ' BUY')
         elif is_sell and stock_count != 0:
             monkey_count = stock_count * close_price
             stock_count = 0
@@ -315,7 +327,7 @@ def recall(stock_code):
                 if curr_retreat > max_retreat:
                     max_retreat = curr_retreat
             trade_num += 1
-            print(info + ' 卖出')
+            print(info + ' SELL')
         else:
             print(info)
     final_close = stock_data_all.close.values[-1]
@@ -500,11 +512,14 @@ def get_adjust_data(stock_data):
     stock_data['turnover'].values[-1] = stock_data['turnover'].values[-1] * rate
     return stock_data
 
+def print_red(msg):
+    print(f'\033[31m{msg}\033[0m')
+
+def print_green(msg):
+    print(f'\033[32m{msg}\033[0m')
+
 
 if __name__ == "__main__":
-    # print(f'\033[32m这是绿色字体\033[0m')
-    # print(f'\033[31m这是红色字体\033[0m')
-
     msg_list = []
     if is_recall:
         msg_list = batch_recall(is_custom)        
