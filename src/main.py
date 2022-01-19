@@ -266,6 +266,7 @@ def get_stock_signals(stock_data):
     shooting_signal = get_shooting_signal(stock_data) # '' | TOP|num | BOTTOM|num
     stock_score = get_stock_score(stock_data) # float
     gmma_signal = get_gmma_signal(stock_data.close.values) # GMMA_UP | GMMA_DOWN | GMMA_TWINE
+    angle_signal = get_angle_signal(stock_data)
     
     return {
         "rsrs_score": round(rsrs_score, 2),
@@ -273,7 +274,19 @@ def get_stock_signals(stock_data):
         "shooting_signal": shooting_signal,
         "stock_score": stock_score,
         "gmma_signal": gmma_signal,
+        "angle_signal": angle_signal,
     }
+
+def get_angle_signal(stock_data):
+    num = 5
+    y_arr = get_ema(stock_data.close, num)[-num:]
+    x_arr = list(range(1, num + 1))
+    x = np.polyfit(x_arr, y_arr, 1)
+    # 弧度
+    h = math.atan(x[0])
+    # 角度
+    a = math.degrees(h)
+    return round(a, 2)
 
 # 运行回测
 def recall(stock_code):
@@ -452,8 +465,9 @@ def op_signal(stock_data):
     vol = f'''vol({round(b_s['volume_signal'], 2)}->{round(c_s['volume_signal'], 2)}->{round(d_s['volume_signal'], 2)})'''
     gmma = f'''【{b_s['gmma_signal']}->{c_s['gmma_signal']}->{d_s['gmma_signal']}】'''
     rsrs = f'''rsrs({b_s['rsrs_score']}->{c_s['rsrs_score']}->{d_s['rsrs_score']})'''
+    angle = f'''angle({b_s['angle_signal']}->{c_s['angle_signal']}->{d_s['angle_signal']})'''
 
-    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {point_info}'''
+    res = f'''{op}{stock_code} {latest_price} {rsrs} {vol} {angle} {point_info}'''
     return res
 
 def get_point_info(latest_price, a_s, b_s, c_s):
