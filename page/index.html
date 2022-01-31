@@ -10,11 +10,11 @@
   <body>
     <div id="app">
       <div>
-        <div>止盈小工具</div>
+        <div>中间价小工具</div>
         <div style="display: flex; align-items: center;">
-          <input v-model="price1" placeholder="买入价" />
-          <input v-model="price2" placeholder="最高价" />
-          <span>50%止盈点：{{ (Number(price1) + Number(price2)) / 2 }}</span>
+          <input v-model="price1" placeholder="价格1" />
+          <input v-model="price2" placeholder="价格2" />
+          <div>50%点位：{{ (Number(price1) + Number(price2)) / 2 }}</div>
         </div>
       </div>
       <div>=====================================</div>
@@ -28,21 +28,21 @@
         <div style="display: flex; align-items: center;">
           <input v-model="price" placeholder="价格" />
           <input v-model="message" placeholder="理由" />
-          <span>
+          <div style="display: flex; align-items: center;">
             <input type="range" step="0.1" min="0.1" max="1" v-model="range" />
-            <span>{{range}}</span>
-          </span>
-          <button @click="submit">提交</button>
-          <!-- <button @click="undo">撤销</button> -->
+            <span>{{range * 100}}%</span>
+          </div>
         </div>
+        <button @click="submit">提交</button>
       </div>
       <div>=====================================</div>
       <div class="output">
-        盈亏结果： {{ output }} 现金：{{ money }} 股数：{{ Math.round(stocks) }} 最新价：{{latestPrice}}
+        <div>交易盈亏：{{ output }}</div>
+        现金：{{ Math.round(money) }} 股数：{{ Math.round(stocks) }} 最新：{{latestPrice}} 均价：{{avgPrice}}
         <ul class="trade-list">
           <li v-for="tradeItem in tradeList">
             {{tradeItem.operate}} {{tradeItem.price}} {{tradeItem.message}}
-            {{tradeItem.diff}}
+            {{tradeItem.diff ? tradeItem.diff : ''}}
           </li>
         </ul>
       </div>

@@ -6,6 +6,7 @@ new Vue({
     // 股票信息
     money: ORIGIN_MONEY,
     stocks: 0,
+    totalCost: 0,
 
     operate: '', // buy | sell
     price: '',
@@ -33,6 +34,7 @@ new Vue({
 
         this.stocks += tradeMoney / this.price
         this.money -= tradeMoney
+        this.totalCost += tradeMoney
       } else {
         if (this.stocks === 0) return alert('只能买入')
 
@@ -42,13 +44,16 @@ new Vue({
 
         this.stocks -= tradeStocks
         this.money += tradeStocks * this.price
+
+        if (this.stocks === 0) {
+          this.totalCost = 0
+        }
       }
 
       const tradeItem = {
         operate: this.operate,
         price: this.price,
         message: this.message,
-        diff: '0%',
       }
 
       const beforeTradeItem = this.tradeList[this.tradeList.length - 1]
@@ -86,10 +91,14 @@ new Vue({
       const latestPrice = this.tradeList[this.tradeList.length - 1]?.price
       return latestPrice ? Number(latestPrice) : 0
     },
+    avgPrice() {
+      if (this.totalCost === 0) return 0
+      return (this.totalCost / this.stocks).toFixed(2)
+    },
     output() {
       const currMoney = this.money + this.stocks * this.latestPrice
       return `${((currMoney - ORIGIN_MONEY) / ORIGIN_MONEY * 100).toFixed(2)}%`
-    }
+    },
   },
   mounted() {
     this.init()
