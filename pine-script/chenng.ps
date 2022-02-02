@@ -1,0 +1,104 @@
+//@version=5
+indicator('Chenng', overlay=true)
+
+// =================== 打印信息 ==========================
+printText =
+  "低位放量上涨必会回调 \n" +
+  "低位放量下跌必会反弹 \n" +
+  "低位缩量不跌是底部 \n" +
+  "高位放量上涨必会下跌 \n" + 
+  "高位放量下跌难创新高 \n" + 
+  "高位缩量下跌还会新高 \n" +
+  "高位放量滞涨是顶部\n" +
+  "均线方向是最小阻力方向"
+
+// =================== 通用函数 ===========================
+// 绘制一个标记小图标
+drawLabel() =>
+    var label lbu = label.new(na, na, "", style = label.style_label_up, color=color.red, size=size.tiny)
+    label.set_xy(lbu, bar_index, low * 0.98)
+    label.set_text(lbu, '')
+
+// 打印文字到图表上
+printText(_text) =>
+    var table _table = table.new(position.middle_right, 1, 1)
+    table.cell(_table, 0, 0, _text, text_halign=text.align_left)
+
+// =================== K线颜色 ========================
+sma5 = ta.sma(close, 5)
+isMaRising  = ta.rising(sma5, 1)
+selectedColor = isMaRising ? color.red : color.green
+strongColor = color.black
+
+// =================== GMMA =============================
+plot(ta.ema(close, 50), color=color.new(color.orange, 0), title="short1")
+plot(ta.ema(close, 60), color=color.new(color.orange, 0), title="short2")
+plot(ta.ema(close, 75), color=color.new(color.orange, 0), title="short3")
+plot(ta.ema(close, 90), color=color.new(color.orange, 0), title="short4")
+plot(ta.ema(close, 120), color=color.new(color.orange, 0), title="short5")
+plot(ta.ema(close, 150), color=color.new(color.orange, 0), title="short6")
+plot(ta.ema(close, 200), color=color.new(color.blue, 0), title="long1")
+plot(ta.ema(close, 260), color=color.new(color.blue, 0), title="long2")
+plot(ta.ema(close, 320), color=color.new(color.blue, 0), title="long3")
+plot(ta.ema(close, 380), color=color.new(color.blue, 0), title="long4")
+plot(ta.ema(close, 440), color=color.new(color.blue, 0), title="long5")
+plot(ta.ema(close, 500), color=color.new(color.blue, 0), title="long6")
+
+// ======================= 将交易量显示在K线上 ==============================
+LONG_VOL_LEN = 50
+SHORT_VOL_LEN = 1
+
+longVolAvg = math.sum(volume, LONG_VOL_LEN) / LONG_VOL_LEN
+shortVolAvg = math.sum(volume, SHORT_VOL_LEN) / SHORT_VOL_LEN
+
+// 开盘中，近似计算成交总量
+if timeframe.isdaily and barstate.islast and time_close - timenow > 0
+    shortVolAvg := volume / (1 - (time_close - timenow) / 1000 / (6.5 * 3600))
+volDiff = shortVolAvg / longVolAvg
+
+barColor = color.new(selectedColor, 0)
+if volDiff >= 1.2
+    if barstate.islast
+        drawLabel()
+    if volDiff >= 1.6
+        barColor := color.new(strongColor, 0)
+    else if volDiff >= 1.4
+        barColor := color.new(strongColor, 20)
+    else
+        barColor := color.new(strongColor, 40)
+else
+    if volDiff > 1.0 and volDiff < 1.2
+        barColor := color.new(selectedColor, 0)
+    else if volDiff >= 0.8 and volDiff < 1.0
+        barColor := color.new(selectedColor, 20)
+    else if volDiff >= 0.6 and volDiff < 0.8
+        barColor := color.new(selectedColor, 40)
+    else
+        barColor := color.new(selectedColor, 60)
+barcolor(barColor)
+
+// =================== 价格信息 ===========================
+if barstate.islast
+    LATEST_LEN = 4
+    lowIndex = 0
+    lowest = low
+    highest = high
+    for i = 0 to LATEST_LEN
+        if low[i] <= lowest
+            lowest := low[i]
+            lowIndex := i
+    
+    for i = 0 to lowIndex
+        if high[i] >= highest
+            highest := high[i]
+
+    protectPrice = str.tostring((lowest + highest) / 2)
+    priceTips = "低: " + str.tostring(lowest) + " 高: " + str.tostring(highest) +
+  "\n" +
+  "50%保护点位: " + protectPrice
+
+    tipsStr =
+  priceTips +
+  "\n\n" +
+  printText
+    printText(tipsStr)
